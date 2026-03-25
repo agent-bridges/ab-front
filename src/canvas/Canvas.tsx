@@ -241,7 +241,8 @@ export default function Canvas() {
   const minimapModel = useMemo(() => {
     if (isMobile) return null;
 
-    const bounds = getRenderableBounds(items);
+    const minimapItems = items.filter((item) => !item.pinned);
+    const bounds = getRenderableBounds(minimapItems);
     const el = containerRef.current;
     if (!bounds || !el) return null;
     const contentWidth = minimapWidth;
@@ -297,7 +298,7 @@ export default function Canvas() {
       contentWidth,
       contentHeight,
       viewport,
-      items,
+      items: minimapItems,
     };
   }, [containerVersion, isMobile, items, minimapHeight, minimapWidth, panX, panY, zoom]);
 

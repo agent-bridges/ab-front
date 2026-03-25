@@ -294,7 +294,7 @@ export default function CanvasItemNode({
                 className="w-full px-3 py-1.5 text-xs text-canvas-text hover:bg-canvas-accent/20 text-left"
                 onClick={handleTogglePinned}
               >
-                {item.pinned ? 'Unlock' : 'Lock'}
+                {item.pinned ? 'Unpin' : 'Pin'}
               </button>
             </>
           )}
