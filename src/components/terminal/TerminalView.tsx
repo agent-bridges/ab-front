@@ -10,7 +10,7 @@ export default function TerminalView({ item }: { item: CanvasItem }) {
   return (
     <div
       ref={wrapperRef}
-      className="w-full h-full relative"
+      className="w-full h-full relative overscroll-contain"
       style={{ background: '#06060a', padding: 4 }}
     >
       {error && (

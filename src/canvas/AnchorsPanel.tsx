@@ -100,7 +100,7 @@ export default function AnchorsPanel({
             <Minus size={12} className="text-canvas-muted" />
           </button>
         </div>
-        <div className="absolute inset-x-0 bottom-0 top-8 overflow-y-auto p-2 space-y-1">
+        <div className="absolute inset-x-0 bottom-0 top-8 overflow-y-auto overscroll-contain p-2 space-y-1">
           {anchors.length === 0 ? (
             <div className="rounded border border-dashed border-canvas-border px-3 py-4 text-xs text-canvas-muted">
               No anchors on this board

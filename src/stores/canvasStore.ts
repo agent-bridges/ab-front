@@ -549,6 +549,36 @@ interface CanvasState {
 
 let nextId = Date.now();
 
+interface BoardRuntimeSnapshot {
+  items: CanvasItem[];
+}
+
+const boardRuntimeCache = new Map<string, BoardRuntimeSnapshot>();
+
+function cloneCanvasItem(item: CanvasItem): CanvasItem {
+  return {
+    ...item,
+    window: item.window ? { ...item.window } : undefined,
+    ptyProcesses: item.ptyProcesses ? item.ptyProcesses.map((proc) => ({ ...proc })) : undefined,
+  };
+}
+
+function loadBoardRuntimeSnapshot(agentId?: string | null): BoardRuntimeSnapshot | null {
+  if (!agentId) return null;
+  const snapshot = boardRuntimeCache.get(agentId);
+  if (!snapshot) return null;
+  return {
+    items: snapshot.items.map(cloneCanvasItem),
+  };
+}
+
+function saveBoardRuntimeSnapshot(agentId: string | null, items: CanvasItem[]) {
+  if (!agentId) return;
+  boardRuntimeCache.set(agentId, {
+    items: items.map(cloneCanvasItem),
+  });
+}
+
 export const useCanvasStore = create<CanvasState>()(
   (set, get) => ({
     boardAgentId: null,
@@ -613,9 +643,10 @@ export const useCanvasStore = create<CanvasState>()(
       const minimapPrefs = loadMinimapPrefs(agentId);
       const anchorsPanelPrefs = loadAnchorsPanelPrefs(agentId);
       const workspaceUiPrefs = loadWorkspaceUiPrefs(agentId);
+      const cachedSnapshot = loadBoardRuntimeSnapshot(agentId);
       set({
         boardAgentId: agentId,
-        items: [],
+        items: cachedSnapshot?.items ?? [],
         selectedItemIds: [],
         focusedAnchorId: null,
         draggingItemIds: [],
@@ -700,9 +731,10 @@ export const useCanvasStore = create<CanvasState>()(
         if (get().boardAgentId !== agentId) {
           return;
         }
+        const fallbackSnapshot = loadBoardRuntimeSnapshot(agentId);
         set({
           boardAgentId: agentId,
-          items: [],
+          items: fallbackSnapshot?.items ?? [],
           selectedItemIds: [],
           focusedAnchorId: null,
           draggingItemIds: [],
@@ -1528,3 +1560,7 @@ export const useCanvasStore = create<CanvasState>()(
     },
   }),
 );
+
+useCanvasStore.subscribe((state) => {
+  saveBoardRuntimeSnapshot(state.boardAgentId, state.items);
+});

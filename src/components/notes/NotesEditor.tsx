@@ -35,7 +35,7 @@ export default function NotesEditor({
           onChange={handleChange}
           placeholder="Type your notes here..."
           autoFocus
-          className="flex-1 w-full bg-canvas-surface border border-canvas-border rounded-lg p-3 text-sm text-canvas-text placeholder-canvas-muted resize-none focus:outline-none focus:border-canvas-accent font-mono"
+          className="flex-1 w-full bg-canvas-surface border border-canvas-border rounded-lg p-3 text-sm text-canvas-text placeholder-canvas-muted resize-none focus:outline-none focus:border-canvas-accent font-mono overscroll-contain"
         />
       )}
     </div>

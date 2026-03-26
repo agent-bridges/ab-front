@@ -86,7 +86,7 @@ export default function MarkdownPreview({ content }: { content: string }) {
         i += 1;
       }
       blocks.push(
-        <pre key={`code-${i}`} className="rounded-lg border border-canvas-border bg-canvas-bg p-3 overflow-x-auto text-xs text-canvas-text font-mono">
+        <pre key={`code-${i}`} className="rounded-lg border border-canvas-border bg-canvas-bg p-3 overflow-x-auto overscroll-contain text-xs text-canvas-text font-mono">
           <code>{codeLines.join('\n')}</code>
         </pre>,
       );
@@ -183,5 +183,5 @@ export default function MarkdownPreview({ content }: { content: string }) {
     return <div className="text-sm text-canvas-muted">Nothing to preview yet.</div>;
   }
 
-  return <div className="h-full overflow-auto rounded-lg border border-canvas-border bg-canvas-surface p-4 space-y-4">{blocks}</div>;
+  return <div className="h-full overflow-auto overscroll-contain rounded-lg border border-canvas-border bg-canvas-surface p-4 space-y-4">{blocks}</div>;
 }

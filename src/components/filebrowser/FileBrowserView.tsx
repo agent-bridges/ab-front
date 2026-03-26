@@ -229,7 +229,7 @@ export default function FileBrowserView({ item }: { item: CanvasItem }) {
       )}
 
       {/* File list */}
-      <div className="flex-1 overflow-y-auto" onClick={() => setSelected(null)}>
+      <div className="flex-1 overflow-y-auto overscroll-contain" onClick={() => setSelected(null)}>
         {loading && <div className="p-4 text-sm text-canvas-muted text-center">Loading...</div>}
         {error && <div className="p-4 text-sm text-red-400 text-center">{error}</div>}
         {!loading && !error && files.length === 0 && (
