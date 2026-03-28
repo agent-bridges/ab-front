@@ -18,12 +18,20 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: #1e1e2e;
-  border-radius: 3px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+html {
+  scrollbar-width: auto;
+  scrollbar-color: #1e1e2e transparent;
 }
