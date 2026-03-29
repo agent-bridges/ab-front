@@ -7,6 +7,7 @@ interface AgentState {
   currentAgentId: string | null;
   boardRefreshToken: number;
   loading: boolean;
+  reset: () => void;
   setCurrentAgent: (id: string) => void;
   refreshCurrentAgentBoard: () => void;
   loadAgents: (preferredAgentId?: string | null) => Promise<void>;
@@ -18,6 +19,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   boardRefreshToken: 0,
   loading: false,
 
+  reset: () => set({
+    agents: [],
+    currentAgentId: null,
+    loading: false,
+  }),
   setCurrentAgent: (id) => set({ currentAgentId: id }),
   refreshCurrentAgentBoard: () => set((state) => ({ boardRefreshToken: state.boardRefreshToken + 1 })),
 

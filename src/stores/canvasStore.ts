@@ -12,7 +12,7 @@ import {
   getCanvasLayoutSnapshot,
   type CanvasLayoutSnapshot,
 } from '../api/canvas';
-import { killPty } from '../api/pty';
+import { killPty, updatePtyMeta } from '../api/pty';
 import { getViewportSpawnPosition } from '../utils/canvasViewport';
 import { getPathLeafForTitle, isAutoLabel, makeAutoLabel } from '../utils/canvasItemTitle';
 
@@ -680,7 +680,7 @@ export const useCanvasStore = create<CanvasState>()(
         }
         const unmigratedItemIds = new Set(items.filter((item) => !item.agentId).map((item) => item.id));
         // Apply localStorage positions, default to vertical list if missing
-        const cleaned = items.map((rawItem, idx) => {
+        const cleaned = items.map((rawItem) => {
           const item = normalizeLegacyAutoLabel({
             ...rawItem,
             agentId: rawItem.agentId || agentId,
@@ -688,9 +688,10 @@ export const useCanvasStore = create<CanvasState>()(
           const saved = layout[item.id];
           return {
             ...item,
-            x: saved ? saved.x : GRID,
-            y: saved ? saved.y : GRID + idx * GRID,
             window: saved?.window || item.window || undefined,
+            pinned: saved?.pinned ?? item.pinned,
+            pinnedViewportX: saved?.pinnedViewportX ?? item.pinnedViewportX,
+            pinnedViewportY: saved?.pinnedViewportY ?? item.pinnedViewportY,
           };
         });
         set({
@@ -901,6 +902,7 @@ export const useCanvasStore = create<CanvasState>()(
           pinnedViewportX: item.pinnedViewportX,
           pinnedViewportY: item.pinnedViewportY,
         });
+        saveItem(id);
       }
     },
 
@@ -934,14 +936,29 @@ export const useCanvasStore = create<CanvasState>()(
             pinnedViewportX: item.pinnedViewportX,
             pinnedViewportY: item.pinnedViewportY,
           });
+          saveItem(id);
         }
       }
     },
 
     updateItem: (id, patch) => {
+      const currentItem = get().items.find((i) => i.id === id);
       set((s) => ({
         items: s.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
       }));
+
+      if (
+        currentItem?.type === 'terminal' &&
+        currentItem.agentId &&
+        currentItem.ptyId &&
+        typeof patch.label === 'string' &&
+        patch.label !== currentItem.label
+      ) {
+        updatePtyMeta(currentItem.agentId, currentItem.ptyId, { label: patch.label }).catch((e) =>
+          console.error('Failed to update PTY label:', e),
+        );
+      }
+
       // Only save to DB if it's not just transient pty data
       const hasDbFields = Object.keys(patch).some(
         (k) => !['ptyProcesses', 'ptyAlive', 'aiStatus'].includes(k),

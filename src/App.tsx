@@ -21,6 +21,7 @@ function getBoardPath(agentId: string | null): string {
 
 export default function App() {
   const loadAgents = useAgentStore((s) => s.loadAgents);
+  const resetAgents = useAgentStore((s) => s.reset);
   const agents = useAgentStore((s) => s.agents);
   const currentAgentId = useAgentStore((s) => s.currentAgentId);
   const boardRefreshToken = useAgentStore((s) => s.boardRefreshToken);
@@ -34,17 +35,37 @@ export default function App() {
   const loadItems = useCanvasStore((s) => s.loadItems);
 
   useEffect(() => {
-    checkInit();
-    checkAuth().then((status) => {
-      setNeedsAuth(status === 'unauthenticated');
-      setAuthChecked(true);
-    });
-  }, [checkInit]);
+    let cancelled = false;
 
-  useEffect(() => {
-    if (needsAuth) return;
-    loadAgents(getAgentIdFromPath(window.location.pathname));
-  }, [loadAgents, needsAuth]);
+    const initAuth = async () => {
+      checkInit();
+      const status = await checkAuth();
+      if (cancelled) return;
+
+      if (status === 'unauthenticated') {
+        resetAgents();
+        await loadItems(null);
+        setNeedsAuth(true);
+        setAuthChecked(true);
+        return;
+      }
+
+      const preferredAgentId = getAgentIdFromPath(window.location.pathname);
+      resetAgents();
+      await loadItems(null);
+      await loadAgents(preferredAgentId);
+      if (cancelled) return;
+
+      setNeedsAuth(false);
+      setRouteAgentId(preferredAgentId);
+      setAuthChecked(true);
+    };
+
+    void initAuth();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkInit, loadAgents, loadItems, resetAgents]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -97,9 +118,13 @@ export default function App() {
     return (
       <LoginPage
         onLoggedIn={() => {
-          setNeedsAuth(false);
-          setAuthChecked(true);
-          setRouteAgentId(getAgentIdFromPath(window.location.pathname));
+          const preferredAgentId = getAgentIdFromPath(window.location.pathname);
+          resetAgents();
+          void loadItems(null).then(() => loadAgents(preferredAgentId)).then(() => {
+            setNeedsAuth(false);
+            setAuthChecked(true);
+            setRouteAgentId(preferredAgentId);
+          });
         }}
       />
     );

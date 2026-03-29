@@ -17,15 +17,14 @@ export async function fetchCanvasItems(agentId?: string | null): Promise<CanvasI
   const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
   const resp = await authFetch(`/api/canvas${query}`);
   const items = await readJsonOrThrow<CanvasItem[]>(resp, 'Failed to fetch canvas items');
-  // Merge per-device layout from localStorage
+  // Merge per-device presentation state from localStorage.
+  // Board item data itself (x/y/label/content/path) comes from daemon.
   const layout = loadLayout(agentId);
   return items.map((item) => {
     const l = layout[item.id];
     if (l) {
       return {
         ...item,
-        x: l.x,
-        y: l.y,
         pinned: l.pinned ?? item.pinned,
         pinnedViewportX: l.pinnedViewportX ?? item.pinnedViewportX,
         pinnedViewportY: l.pinnedViewportY ?? item.pinnedViewportY,
@@ -44,16 +43,14 @@ export async function upsertCanvasItem(item: CanvasItem, agentId?: string | null
     pinnedViewportY: item.pinnedViewportY,
   });
 
-  if (item.type === 'terminal') {
-    return;
-  }
-
-  // Save non-PTY board item data to backend.
+  // Save shared board item data to daemon-backed backend.
   const res = await authFetch(`/api/canvas/${item.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: item.type,
+      x: item.x,
+      y: item.y,
       label: item.label,
       ptyId: item.ptyId,
       agentId: scopedAgentId,
@@ -72,15 +69,16 @@ export async function deleteCanvasItem(id: string, agentId?: string | null): Pro
 }
 
 export async function syncCanvasItems(items: CanvasItem[], agentId?: string | null): Promise<void> {
-  const persistedItems = items.filter((item) => item.type !== 'terminal');
   const res = await authFetch('/api/canvas/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       agentId,
-      items: persistedItems.map((i) => ({
+      items: items.map((i) => ({
         id: i.id,
         type: i.type,
+        x: i.x,
+        y: i.y,
         label: i.label,
         ptyId: i.ptyId,
         agentId: i.agentId ?? agentId ?? undefined,
