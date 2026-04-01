@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, Minus } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useAgentStore } from '../stores/agentStore';
 import { CREATE_ITEMS, createCanvasItemAtPosition } from '../components/createItems';
@@ -167,6 +167,53 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
       >
         {orderedItems.map((item) => {
           const isDragging = draggingId === item.id;
+
+          // Anchor → full-width splitter/separator
+          if (item.type === 'anchor') {
+            return (
+              <div
+                key={item.id}
+                className={`flex items-center gap-2 rounded-lg select-none ${isDragging ? 'opacity-30' : ''}`}
+                style={{
+                  gridColumn: `1 / -1`,
+                  height: 28,
+                  padding: '0 8px',
+                  background: 'var(--canvas-border, #3b3a32)',
+                  animation: dragMode && !isDragging ? `wiggle 0.3s ease-in-out infinite alternate` : undefined,
+                }}
+                onPointerDown={(e) => handleDragStart(item.id, e)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
+                }}
+              >
+                <div className="flex-1 h-px bg-canvas-muted/30" />
+                {renaming === item.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename();
+                      if (e.key === 'Escape') setRenaming(null);
+                    }}
+                    className="bg-canvas-bg border border-canvas-accent rounded px-2 text-canvas-text outline-none text-center"
+                    style={{ fontSize: 11, maxWidth: 160 }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span className="text-xs text-canvas-muted font-semibold uppercase tracking-wider px-2">
+                    {getCanvasItemTitle(item)}
+                  </span>
+                )}
+                <div className="flex-1 h-px bg-canvas-muted/30" />
+              </div>
+            );
+          }
+
+          // Regular icon
           return (
             <div
               key={item.id}
@@ -304,16 +351,20 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
               </button>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              {CREATE_ITEMS.filter(({ type }) => type !== 'anchor').map(({ type, label, icon: Icon }) => (
-                <button
-                  key={type}
-                  onClick={() => handleCreate(type)}
-                  className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-canvas-border active:opacity-70"
-                >
-                  <Icon size={28} className="text-canvas-accent" />
-                  <span className="text-[11px] text-canvas-text">{label}</span>
-                </button>
-              ))}
+              {CREATE_ITEMS.map(({ type, label, icon: Icon }) => {
+                const displayLabel = type === 'anchor' ? 'Splitter' : label;
+                const DisplayIcon = type === 'anchor' ? Minus : Icon;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => handleCreate(type)}
+                    className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-canvas-border active:opacity-70"
+                  >
+                    <DisplayIcon size={28} className="text-canvas-accent" />
+                    <span className="text-[11px] text-canvas-text">{displayLabel}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </>
