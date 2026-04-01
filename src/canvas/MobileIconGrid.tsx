@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useAgentStore } from '../stores/agentStore';
@@ -27,6 +27,16 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [dragMode, setDragMode] = useState(false);
+
+  // Listen for drag mode toggle from Toolbar
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setDragMode((e as CustomEvent).detail?.enabled ?? false);
+    };
+    window.addEventListener('mobile-drag-mode', handler);
+    return () => window.removeEventListener('mobile-drag-mode', handler);
+  }, []);
 
   const handleTap = useCallback((item: CanvasItem) => {
     if (item.type === 'anchor') return;
@@ -78,19 +88,23 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
         {items.map((item) => (
           <div
             key={item.id}
-            className="flex flex-col items-center justify-center rounded-xl select-none active:opacity-70"
+            className={`flex flex-col items-center justify-center rounded-xl select-none active:opacity-70 ${dragMode ? 'animate-wiggle cursor-grab' : ''}`}
             style={{
               width: CELL,
               height: CELL + 16,
               background: item.window?.isOpen
                 ? 'var(--canvas-accent-bg, rgba(212,165,116,0.1))'
                 : 'var(--canvas-surface, #1a1b14)',
+              animation: dragMode ? `wiggle 0.3s ease-in-out infinite alternate ${Math.random() * 0.2}s` : undefined,
             }}
-            onClick={() => handleTap(item)}
+            onClick={() => {
+              if (dragMode) return; // In drag mode, tap does nothing (drag handles reorder)
+              handleTap(item);
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
+              if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
             }}
           >
             <ItemIcon item={item} size={24} />

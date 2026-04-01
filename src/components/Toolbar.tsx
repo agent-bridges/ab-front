@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ZoomIn, ZoomOut, Maximize, Terminal,
   Columns3, Rows3, LayoutGrid, Menu, X, AppWindow, XSquare, LogOut, Minus, Map, MapPin,
-  Save, Download, Trash2, Settings2, Search,
+  Save, Download, Trash2, Settings2, Search, GripVertical,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useCanvasStore } from '../stores/canvasStore';
@@ -43,6 +43,7 @@ export default function Toolbar() {
   const isMobile = useIsMobile();
   const [menuOpen, setMenuOpen] = useState(false);
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const [dragMode, setDragMode] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
@@ -304,6 +305,17 @@ export default function Toolbar() {
             title="PTY daemon connections"
           >
             <Settings2 size={16} className="text-canvas-muted" />
+          </button>
+          <button
+            onClick={() => {
+              const next = !dragMode;
+              setDragMode(next);
+              window.dispatchEvent(new CustomEvent('mobile-drag-mode', { detail: { enabled: next } }));
+            }}
+            className={`inline-flex items-center justify-center rounded p-1 shrink-0 ${dragMode ? 'bg-canvas-accent/20 ring-1 ring-canvas-accent' : 'hover:bg-canvas-border'}`}
+            title={dragMode ? 'Exit reorder mode' : 'Reorder icons'}
+          >
+            <GripVertical size={16} className={dragMode ? 'text-canvas-accent' : 'text-canvas-muted'} />
           </button>
           <div className="flex-1" />
           <button
