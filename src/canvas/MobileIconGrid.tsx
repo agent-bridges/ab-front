@@ -95,7 +95,6 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   }, [renaming, renameValue, updateItem]);
 
   const handleCreate = async (type: string) => {
-    setShowCreate(false);
     await createCanvasItemAtPosition({
       type: type as any,
       x: 0,
