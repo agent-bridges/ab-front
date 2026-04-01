@@ -204,7 +204,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                     onPointerDown={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span className="text-xs text-canvas-muted font-semibold uppercase tracking-wider px-2">
+                  <span className="text-xs text-canvas-accent font-semibold uppercase tracking-wider px-2">
                     {getCanvasItemTitle(item)}
                   </span>
                 )}
