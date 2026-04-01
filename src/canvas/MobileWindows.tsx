@@ -127,6 +127,8 @@ export default function MobileWindows() {
         {openWindows.map((item) => {
           const Icon = ICONS[item.type] || Terminal;
           const isActive = item.id === activeId;
+          const isBusy = item.aiStatus && item.aiStatus !== 'idle' && !item.aiStatus.startsWith('error');
+          const isError = item.aiStatus?.startsWith('error');
           return (
             <button
               key={item.id}
@@ -134,7 +136,11 @@ export default function MobileWindows() {
               className={`flex items-center gap-1.5 px-3 h-full text-xs whitespace-nowrap border-r border-canvas-border transition-colors ${
                 isActive
                   ? 'bg-canvas-bg text-canvas-accent border-t-2 border-t-canvas-accent'
-                  : 'text-canvas-muted hover:bg-canvas-border'
+                  : isError
+                    ? 'text-red-400 hover:bg-red-500/10'
+                    : isBusy
+                      ? 'text-canvas-accent hover:bg-canvas-border animate-pulse'
+                      : 'text-canvas-muted hover:bg-canvas-border'
               }`}
             >
               <Icon size={12} />
