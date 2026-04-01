@@ -750,7 +750,7 @@ export default function Canvas() {
   return (
     <div
       ref={setRefs}
-      className={`flex-1 relative bg-canvas-bg ${isMobile ? 'overflow-hidden' : 'overflow-auto'}`}
+      className={`flex-1 relative bg-canvas-bg ${isMobile ? 'overflow-y-auto' : 'overflow-auto'}`}
       data-canvas="bg"
       data-canvas-root="true"
       onPointerDown={onPointerDown}

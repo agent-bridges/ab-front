@@ -153,7 +153,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   return (
     <div
       className="flex-1 overflow-y-auto p-3"
-      style={{ paddingBottom: 48, touchAction: dragMode ? 'none' : undefined }}
+      style={{ paddingBottom: 48, touchAction: dragMode ? 'none' : undefined, minHeight: 0 }}
     >
       <div
         ref={gridRef}
