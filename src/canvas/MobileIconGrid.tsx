@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useAgentStore } from '../stores/agentStore';
@@ -28,40 +28,12 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Long press tracking
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressTriggered = useRef(false);
-
-  const handlePointerDown = useCallback((item: CanvasItem, e: React.PointerEvent) => {
-    longPressTriggered.current = false;
-    const x = e.clientX;
-    const y = e.clientY;
-    longPressTimer.current = setTimeout(() => {
-      longPressTriggered.current = true;
-      setContextMenu({ itemId: item.id, x, y });
-    }, LONG_PRESS_MS);
-  }, []);
-
-  const handlePointerUp = useCallback((item: CanvasItem) => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-    if (!longPressTriggered.current) {
-      // Normal tap
-      if (item.type === 'anchor') return;
-      openWindow(item.id);
-      window.dispatchEvent(new CustomEvent('mobile-open-tab', { detail: { itemId: item.id } }));
-      onOpenItem(item.id);
-    }
+  const handleTap = useCallback((item: CanvasItem) => {
+    if (item.type === 'anchor') return;
+    openWindow(item.id);
+    window.dispatchEvent(new CustomEvent('mobile-open-tab', { detail: { itemId: item.id } }));
+    onOpenItem(item.id);
   }, [openWindow, onOpenItem]);
-
-  const handlePointerCancel = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  }, []);
 
   const handleDelete = useCallback((itemId: string) => {
     removeItem(itemId);
@@ -106,7 +78,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
         {items.map((item) => (
           <div
             key={item.id}
-            className="flex flex-col items-center justify-center rounded-xl select-none active:opacity-70 touch-none"
+            className="flex flex-col items-center justify-center rounded-xl select-none active:opacity-70"
             style={{
               width: CELL,
               height: CELL + 16,
@@ -114,11 +86,12 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                 ? 'var(--canvas-accent-bg, rgba(212,165,116,0.1))'
                 : 'var(--canvas-surface, #1a1b14)',
             }}
-            onPointerDown={(e) => handlePointerDown(item, e)}
-            onPointerUp={() => handlePointerUp(item)}
-            onPointerCancel={handlePointerCancel}
-            onPointerLeave={handlePointerCancel}
-            onContextMenu={(e) => e.preventDefault()}
+            onClick={() => handleTap(item)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
+            }}
           >
             <ItemIcon item={item} size={24} />
             {renaming === item.id ? (
