@@ -182,19 +182,22 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
             return (
               <div
                 key={item.id}
-                className={`flex items-center gap-2 rounded-lg select-none ${isDragging ? 'opacity-30' : ''}`}
+                className={`flex items-center gap-2 rounded-lg select-none ${isDragging ? 'opacity-30' : ''} ${dragMode ? 'cursor-grab' : ''}`}
                 style={{
                   gridColumn: `1 / -1`,
-                  height: 28,
-                  padding: '0 8px',
+                  height: 40,
+                  padding: '0 12px',
                   background: 'var(--canvas-border, #3b3a32)',
-                  animation: dragMode && !isDragging ? `wiggle 0.3s ease-in-out infinite alternate` : undefined,
+                  animation: (dragMode || deleteMode) && !isDragging ? `wiggle 0.3s ease-in-out infinite alternate` : undefined,
+                  touchAction: dragMode ? 'none' : undefined,
+                  border: deleteMode ? '1px solid rgba(249,38,114,0.5)' : undefined,
                 }}
-                onPointerDown={(e) => handleDragStart(item.id, e)}
+                onPointerDown={(e) => { e.stopPropagation(); handleDragStart(item.id, e); }}
+                onClick={() => { if (deleteMode) removeItem(item.id); }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
+                  if (!dragMode && !deleteMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
                 }}
               >
                 <div className="flex-1 h-px bg-canvas-muted/30" style={{ pointerEvents: 'none' }} />
