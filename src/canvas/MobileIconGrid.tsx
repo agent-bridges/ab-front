@@ -109,42 +109,47 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const handleDragStart = (itemId: string, e: React.PointerEvent) => {
     if (!dragMode) return;
     e.preventDefault();
+    e.stopPropagation();
     const el = e.currentTarget as HTMLElement;
     const elRect = el.getBoundingClientRect();
     setDraggingId(itemId);
     setDragOffset({ x: e.clientX - elRect.left, y: e.clientY - elRect.top });
     setDragPos({ x: e.clientX, y: e.clientY });
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  const handleDragMove = (e: React.PointerEvent) => {
-    if (!draggingId) return;
-    setDragPos({ x: e.clientX, y: e.clientY });
-
-    // Find drop target and reorder
-    const dropIdx = getDropIndex(e.clientX, e.clientY);
-    if (dropIdx < 0) return;
-    const dragIdx = order.indexOf(draggingId);
-    if (dragIdx === dropIdx || dragIdx < 0) return;
-
-    setOrder((prev) => {
-      const next = [...prev];
-      next.splice(dragIdx, 1);
-      next.splice(dropIdx, 0, draggingId);
-      return next;
-    });
-  };
-
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     setDraggingId(null);
-  };
+  }, []);
+
+  // Global pointer events for drag — so dragging works outside grid
+  useEffect(() => {
+    if (!draggingId) return;
+    const onMove = (e: PointerEvent) => {
+      setDragPos({ x: e.clientX, y: e.clientY });
+      const dropIdx = getDropIndex(e.clientX, e.clientY);
+      if (dropIdx < 0) return;
+      setOrder((prev) => {
+        const dragIdx = prev.indexOf(draggingId);
+        if (dragIdx === dropIdx || dragIdx < 0) return prev;
+        const next = [...prev];
+        next.splice(dragIdx, 1);
+        next.splice(dropIdx, 0, draggingId);
+        return next;
+      });
+    };
+    const onUp = () => setDraggingId(null);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    return () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+  }, [draggingId]);
 
   return (
     <div
       className="flex-1 overflow-y-auto p-3"
       style={{ paddingBottom: 48 }}
-      onPointerMove={draggingId ? handleDragMove : undefined}
-      onPointerUp={draggingId ? handleDragEnd : undefined}
     >
       <div
         ref={gridRef}
