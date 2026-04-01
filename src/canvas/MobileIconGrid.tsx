@@ -304,7 +304,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
               </button>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              {CREATE_ITEMS.map(({ type, label, icon: Icon }) => (
+              {CREATE_ITEMS.filter(({ type }) => type !== 'anchor').map(({ type, label, icon: Icon }) => (
                 <button
                   key={type}
                   onClick={() => handleCreate(type)}
