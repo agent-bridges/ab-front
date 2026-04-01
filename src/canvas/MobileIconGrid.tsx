@@ -96,15 +96,19 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   };
 
   // Drag handlers
-  const getDropIndex = (clientX: number, clientY: number): number => {
+  const getDropIndex = useCallback((clientX: number, clientY: number): number => {
     if (!gridRef.current) return -1;
     const rect = gridRef.current.getBoundingClientRect();
-    const cellWithGap = CELL + GAP;
-    const col = Math.floor((clientX - rect.left) / cellWithGap);
-    const row = Math.floor((clientY - rect.top) / (CELL + 16 + GAP));
+    const cellW = CELL + GAP;
+    const cellH = CELL + 16 + GAP;
+    const relX = clientX - rect.left;
+    const relY = clientY - rect.top;
+    if (relX < 0 || relY < 0) return 0;
+    const col = Math.min(Math.floor(relX / cellW), COLS - 1);
+    const row = Math.floor(relY / cellH);
     const idx = row * COLS + col;
     return Math.max(0, Math.min(idx, orderedItems.length - 1));
-  };
+  }, [orderedItems.length]);
 
   const handleDragStart = (itemId: string, e: React.PointerEvent) => {
     if (!dragMode) return;
@@ -149,7 +153,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   return (
     <div
       className="flex-1 overflow-y-auto p-3"
-      style={{ paddingBottom: 48 }}
+      style={{ paddingBottom: 48, touchAction: dragMode ? 'none' : undefined }}
     >
       <div
         ref={gridRef}
