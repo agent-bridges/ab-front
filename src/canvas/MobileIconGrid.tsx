@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useAgentStore } from '../stores/agentStore';
@@ -10,7 +10,6 @@ import type { CanvasItem } from '../types';
 const COLS = 5;
 const CELL = 72;
 const GAP = 6;
-const LONG_PRESS_MS = 500;
 
 interface Props {
   onOpenItem: (id: string) => void;
@@ -29,14 +28,35 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const [renameValue, setRenameValue] = useState('');
   const [dragMode, setDragMode] = useState(false);
 
+  // Drag state
+  const [order, setOrder] = useState<string[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Sync order with items
+  useEffect(() => {
+    setOrder((prev) => {
+      const ids = items.map((i) => i.id);
+      // Keep existing order, add new items at end, remove deleted
+      const kept = prev.filter((id) => ids.includes(id));
+      const newIds = ids.filter((id) => !kept.includes(id));
+      return [...kept, ...newIds];
+    });
+  }, [items]);
+
   // Listen for drag mode toggle from Toolbar
   useEffect(() => {
     const handler = (e: Event) => {
       setDragMode((e as CustomEvent).detail?.enabled ?? false);
+      setDraggingId(null);
     };
     window.addEventListener('mobile-drag-mode', handler);
     return () => window.removeEventListener('mobile-drag-mode', handler);
   }, []);
+
+  const orderedItems = order.map((id) => items.find((i) => i.id === id)).filter(Boolean) as CanvasItem[];
 
   const handleTap = useCallback((item: CanvasItem) => {
     if (item.type === 'anchor') return;
@@ -75,62 +95,121 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
     });
   };
 
+  // Drag handlers
+  const getDropIndex = (clientX: number, clientY: number): number => {
+    if (!gridRef.current) return -1;
+    const rect = gridRef.current.getBoundingClientRect();
+    const cellWithGap = CELL + GAP;
+    const col = Math.floor((clientX - rect.left) / cellWithGap);
+    const row = Math.floor((clientY - rect.top) / (CELL + 16 + GAP));
+    const idx = row * COLS + col;
+    return Math.max(0, Math.min(idx, orderedItems.length - 1));
+  };
+
+  const handleDragStart = (itemId: string, e: React.PointerEvent) => {
+    if (!dragMode) return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const elRect = el.getBoundingClientRect();
+    setDraggingId(itemId);
+    setDragOffset({ x: e.clientX - elRect.left, y: e.clientY - elRect.top });
+    setDragPos({ x: e.clientX, y: e.clientY });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleDragMove = (e: React.PointerEvent) => {
+    if (!draggingId) return;
+    setDragPos({ x: e.clientX, y: e.clientY });
+
+    // Find drop target and reorder
+    const dropIdx = getDropIndex(e.clientX, e.clientY);
+    if (dropIdx < 0) return;
+    const dragIdx = order.indexOf(draggingId);
+    if (dragIdx === dropIdx || dragIdx < 0) return;
+
+    setOrder((prev) => {
+      const next = [...prev];
+      next.splice(dragIdx, 1);
+      next.splice(dropIdx, 0, draggingId);
+      return next;
+    });
+  };
+
+  const handleDragEnd = () => {
+    setDraggingId(null);
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto p-3" style={{ paddingBottom: 48 }}>
+    <div
+      className="flex-1 overflow-y-auto p-3"
+      style={{ paddingBottom: 48 }}
+      onPointerMove={draggingId ? handleDragMove : undefined}
+      onPointerUp={draggingId ? handleDragEnd : undefined}
+    >
       <div
+        ref={gridRef}
         style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${COLS}, ${CELL}px)`,
           gap: GAP,
           justifyContent: 'center',
+          position: 'relative',
         }}
       >
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className={`flex flex-col items-center justify-center rounded-xl select-none active:opacity-70 ${dragMode ? 'animate-wiggle cursor-grab' : ''}`}
-            style={{
-              width: CELL,
-              height: CELL + 16,
-              background: item.window?.isOpen
-                ? 'var(--canvas-accent-bg, rgba(212,165,116,0.1))'
-                : 'var(--canvas-surface, #1a1b14)',
-              animation: dragMode ? `wiggle 0.3s ease-in-out infinite alternate ${Math.random() * 0.2}s` : undefined,
-            }}
-            onClick={() => {
-              if (dragMode) return; // In drag mode, tap does nothing (drag handles reorder)
-              handleTap(item);
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
-            }}
-          >
-            <ItemIcon item={item} size={24} />
-            {renaming === item.id ? (
-              <input
-                autoFocus
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitRename();
-                  if (e.key === 'Escape') setRenaming(null);
-                }}
-                className="w-full text-center bg-canvas-bg border border-canvas-accent rounded px-1 mt-1 text-canvas-text outline-none"
-                style={{ fontSize: 10, maxWidth: CELL - 8 }}
-              />
-            ) : (
-              <span
-                className="truncate text-center font-semibold leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] mt-1"
-                style={{ maxWidth: CELL - 8, fontSize: 10 }}
-              >
-                {getCanvasItemTitle(item)}
-              </span>
-            )}
-          </div>
-        ))}
+        {orderedItems.map((item) => {
+          const isDragging = draggingId === item.id;
+          return (
+            <div
+              key={item.id}
+              className={`flex flex-col items-center justify-center rounded-xl select-none ${
+                dragMode ? 'cursor-grab' : 'active:opacity-70'
+              } ${isDragging ? 'opacity-30' : ''}`}
+              style={{
+                width: CELL,
+                height: CELL + 16,
+                background: item.window?.isOpen
+                  ? 'var(--canvas-accent-bg, rgba(212,165,116,0.1))'
+                  : 'var(--canvas-surface, #1a1b14)',
+                animation: dragMode && !isDragging ? `wiggle 0.3s ease-in-out infinite alternate` : undefined,
+                transition: draggingId && !isDragging ? 'transform 0.15s ease' : undefined,
+              }}
+              onClick={() => {
+                if (dragMode) return;
+                handleTap(item);
+              }}
+              onPointerDown={(e) => handleDragStart(item.id, e)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
+              }}
+            >
+              <ItemIcon item={item} size={24} />
+              {renaming === item.id ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename();
+                    if (e.key === 'Escape') setRenaming(null);
+                  }}
+                  className="w-full text-center bg-canvas-bg border border-canvas-accent rounded px-1 mt-1 text-canvas-text outline-none"
+                  style={{ fontSize: 10, maxWidth: CELL - 8 }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span
+                  className="truncate text-center font-semibold leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] mt-1"
+                  style={{ maxWidth: CELL - 8, fontSize: 10 }}
+                >
+                  {getCanvasItemTitle(item)}
+                </span>
+              )}
+            </div>
+          );
+        })}
 
         {/* Add button */}
         <button
@@ -144,9 +223,37 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
         >
           <Plus size={20} style={{ color: 'var(--canvas-muted, #75715e)' }} />
         </button>
+
+        {/* Floating drag ghost */}
+        {draggingId && (() => {
+          const item = items.find((i) => i.id === draggingId);
+          if (!item) return null;
+          return (
+            <div
+              className="fixed pointer-events-none z-[100] flex flex-col items-center justify-center rounded-xl shadow-2xl"
+              style={{
+                width: CELL,
+                height: CELL + 16,
+                left: dragPos.x - dragOffset.x,
+                top: dragPos.y - dragOffset.y,
+                background: 'var(--canvas-surface, #1a1b14)',
+                border: '2px solid var(--canvas-accent, #d4a574)',
+                opacity: 0.9,
+              }}
+            >
+              <ItemIcon item={item} size={24} />
+              <span
+                className="truncate text-center font-semibold leading-tight text-white mt-1"
+                style={{ maxWidth: CELL - 8, fontSize: 10 }}
+              >
+                {getCanvasItemTitle(item)}
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
-      {/* Context menu — long press */}
+      {/* Context menu */}
       {contextMenu && (
         <>
           <div className="fixed inset-0 z-[80]" onClick={() => setContextMenu(null)} />
@@ -176,7 +283,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
         </>
       )}
 
-      {/* Create panel — bottom sheet */}
+      {/* Create panel */}
       {showCreate && (
         <>
           <div className="fixed inset-0 bg-black/50 z-[80]" onClick={() => setShowCreate(false)} />
