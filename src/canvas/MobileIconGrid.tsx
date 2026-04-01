@@ -27,6 +27,16 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [dragMode, setDragMode] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+
+  // Listen for delete mode toggle from Toolbar
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setDeleteMode((e as CustomEvent).detail?.enabled ?? false);
+    };
+    window.addEventListener('mobile-delete-mode', handler);
+    return () => window.removeEventListener('mobile-delete-mode', handler);
+  }, []);
 
   // Drag state
   const [order, setOrder] = useState<string[]>([]);
@@ -217,7 +227,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
           return (
             <div
               key={item.id}
-              className={`flex flex-col items-center justify-center rounded-xl select-none ${
+              className={`flex flex-col items-center justify-center rounded-xl select-none relative ${
                 dragMode ? 'cursor-grab' : 'active:opacity-70'
               } ${isDragging ? 'opacity-30' : ''}`}
               style={{
@@ -226,11 +236,13 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                 background: item.window?.isOpen
                   ? 'var(--canvas-accent-bg, rgba(212,165,116,0.1))'
                   : 'var(--canvas-surface, #1a1b14)',
-                animation: dragMode && !isDragging ? `wiggle 0.3s ease-in-out infinite alternate` : undefined,
+                animation: (dragMode || deleteMode) && !isDragging ? `wiggle 0.3s ease-in-out infinite alternate` : undefined,
                 transition: draggingId && !isDragging ? 'transform 0.15s ease' : undefined,
+                border: deleteMode ? '1px solid rgba(249,38,114,0.5)' : undefined,
               }}
               onClick={() => {
                 if (dragMode) return;
+                if (deleteMode) { removeItem(item.id); return; }
                 handleTap(item);
               }}
               onPointerDown={(e) => handleDragStart(item.id, e)}
@@ -240,6 +252,11 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                 if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
               }}
             >
+              {deleteMode && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 flex items-center justify-center z-10">
+                  <X size={10} className="text-white" />
+                </div>
+              )}
               <ItemIcon item={item} size={24} />
               {renaming === item.id ? (
                 <input

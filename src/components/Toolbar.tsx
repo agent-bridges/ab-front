@@ -44,6 +44,7 @@ export default function Toolbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [dragMode, setDragMode] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
@@ -310,12 +311,25 @@ export default function Toolbar() {
             onClick={() => {
               const next = !dragMode;
               setDragMode(next);
+              if (next) { setDeleteMode(false); window.dispatchEvent(new CustomEvent('mobile-delete-mode', { detail: { enabled: false } })); }
               window.dispatchEvent(new CustomEvent('mobile-drag-mode', { detail: { enabled: next } }));
             }}
             className={`inline-flex items-center justify-center rounded p-1 shrink-0 ${dragMode ? 'bg-canvas-accent/20 ring-1 ring-canvas-accent' : 'hover:bg-canvas-border'}`}
             title={dragMode ? 'Exit reorder mode' : 'Reorder icons'}
           >
             <GripVertical size={16} className={dragMode ? 'text-canvas-accent' : 'text-canvas-muted'} />
+          </button>
+          <button
+            onClick={() => {
+              const next = !deleteMode;
+              setDeleteMode(next);
+              if (next) { setDragMode(false); window.dispatchEvent(new CustomEvent('mobile-drag-mode', { detail: { enabled: false } })); }
+              window.dispatchEvent(new CustomEvent('mobile-delete-mode', { detail: { enabled: next } }));
+            }}
+            className={`inline-flex items-center justify-center rounded p-1 shrink-0 ${deleteMode ? 'bg-red-500/20 ring-1 ring-red-500' : 'hover:bg-canvas-border'}`}
+            title={deleteMode ? 'Exit delete mode' : 'Delete mode'}
+          >
+            <Trash2 size={16} className={deleteMode ? 'text-red-400' : 'text-canvas-muted'} />
           </button>
           <div className="flex-1" />
           <button
