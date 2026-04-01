@@ -197,7 +197,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                   if (!dragMode) setContextMenu({ itemId: item.id, x: e.clientX, y: e.clientY });
                 }}
               >
-                <div className="flex-1 h-px bg-canvas-muted/30" />
+                <div className="flex-1 h-px bg-canvas-muted/30" style={{ pointerEvents: 'none' }} />
                 {renaming === item.id ? (
                   <input
                     autoFocus
@@ -213,11 +213,11 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                     onPointerDown={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span className="text-xs text-canvas-accent font-semibold uppercase tracking-wider px-2">
+                  <span className="text-xs text-canvas-accent font-semibold uppercase tracking-wider px-2" style={{ pointerEvents: 'none' }}>
                     {getCanvasItemTitle(item)}
                   </span>
                 )}
-                <div className="flex-1 h-px bg-canvas-muted/30" />
+                <div className="flex-1 h-px bg-canvas-muted/30" style={{ pointerEvents: 'none' }} />
               </div>
             );
           }
