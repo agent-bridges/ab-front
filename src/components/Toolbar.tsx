@@ -42,6 +42,7 @@ export default function Toolbar() {
   } = useCanvasStore();
   const isMobile = useIsMobile();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
@@ -272,15 +273,31 @@ export default function Toolbar() {
           >
             <BrandMark />
           </button>
-          <select
-            value={currentAgentId || ''}
-            onChange={(e) => setCurrentAgent(e.target.value)}
-            className="bg-canvas-bg border border-canvas-border rounded px-2 py-1 text-xs text-canvas-text focus:outline-none focus:border-canvas-accent min-w-0 flex-shrink"
-          >
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <div className="relative min-w-0 flex-shrink">
+            <button
+              onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+              className="bg-canvas-bg border border-canvas-border rounded px-2 py-1 text-xs text-canvas-text flex items-center gap-1"
+            >
+              <span className="truncate">{agents.find(a => a.id === currentAgentId)?.name || 'Select'}</span>
+              <span className="text-canvas-muted">▾</span>
+            </button>
+            {agentDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-[70]" onClick={() => setAgentDropdownOpen(false)} />
+                <div className="absolute top-full left-0 mt-1 bg-canvas-surface border border-canvas-border rounded shadow-lg z-[71] min-w-[180px] max-h-[60vh] overflow-y-auto">
+                  {agents.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => { setCurrentAgent(a.id); setAgentDropdownOpen(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs hover:bg-canvas-border ${a.id === currentAgentId ? 'text-canvas-accent bg-canvas-accent/10' : 'text-canvas-text'}`}
+                    >
+                      {a.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={() => setConnectionSettingsOpen(true)}
             className="inline-flex items-center justify-center rounded hover:bg-canvas-border p-1 shrink-0"

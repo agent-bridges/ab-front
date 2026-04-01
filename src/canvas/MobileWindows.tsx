@@ -39,10 +39,10 @@ export default function MobileWindows() {
     }
   }, [openWindows, activeId]);
 
-  if (openWindows.length === 0) return null;
-
   const activeItem = activeId ? openWindows.find((w) => w.id === activeId) : null;
   const { mode: noteMode, setMode: setNoteMode } = useNoteViewMode(activeItem?.id || 'mobile-notes');
+
+  if (openWindows.length === 0) return null;
 
   return (
     <>

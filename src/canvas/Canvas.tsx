@@ -8,6 +8,7 @@ import { getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/Proce
 import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import AnchorsPanel from './AnchorsPanel';
 import CanvasItemNode from './CanvasItemNode';
+import MobileIconGrid from './MobileIconGrid';
 import ContextMenu from './ContextMenu';
 import Window from './Window';
 import { BOARD_Z } from './zIndexManager';
@@ -759,29 +760,7 @@ export default function Canvas() {
       style={{ touchAction: 'none' }}
     >
       {isMobile ? (
-        <>
-          <div
-            className="absolute inset-0 pointer-events-none opacity-[0.03]"
-            style={{
-              backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)',
-              backgroundSize: `${GRID * zoom}px ${GRID * zoom}px`,
-              backgroundPosition: `${panX % (GRID * zoom)}px ${panY % (GRID * zoom)}px`,
-            }}
-          />
-          <div
-            style={{
-              transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-              transformOrigin: '0 0',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-            }}
-          >
-            {worldItems.map((item) => (
-              <CanvasItemNode key={item.id} item={item} />
-            ))}
-          </div>
-        </>
+        <MobileIconGrid onOpenItem={() => {}} />
       ) : (
         <div
           className="relative"
