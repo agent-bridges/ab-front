@@ -27,17 +27,26 @@ export default function MobileWindows() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // When new window opens, switch to it
+  // When window closed, go back to canvas
   useEffect(() => {
     if (openWindows.length === 0) {
       setActiveId(null);
       return;
     }
     if (activeId && !openWindows.find((w) => w.id === activeId)) {
-      // Active window was closed — go to canvas
       setActiveId(null);
     }
   }, [openWindows, activeId]);
+
+  // Listen for icon taps from MobileIconGrid
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const itemId = (e as CustomEvent).detail?.itemId;
+      if (itemId) setActiveId(itemId);
+    };
+    window.addEventListener('mobile-open-tab', handler);
+    return () => window.removeEventListener('mobile-open-tab', handler);
+  }, []);
 
   const activeItem = activeId ? openWindows.find((w) => w.id === activeId) : null;
   const { mode: noteMode, setMode: setNoteMode } = useNoteViewMode(activeItem?.id || 'mobile-notes');
