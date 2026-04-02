@@ -17,7 +17,11 @@ import { getViewportSpawnPosition } from '../utils/canvasViewport';
 import { getPathLeafForTitle, isAutoLabel, makeAutoLabel } from '../utils/canvasItemTitle';
 
 const GRID = 80;
+const WORLD_MIN = -3000;
+const WORLD_MAX = 8000;
 function snap(v: number) { return Math.round(v / GRID) * GRID; }
+function clampPos(v: number) { return Math.max(WORLD_MIN, Math.min(WORLD_MAX, v)); }
+function safeSnap(v: number) { return snap(clampPos(v)); }
 const TOOLBAR_H = 40;
 const WORLD_ORIGIN = 4000;
 const DEFAULT_MINIMAP = { visible: true, width: 196, height: 140, x: null as number | null, y: null as number | null };
@@ -828,8 +832,8 @@ export const useCanvasStore = create<CanvasState>()(
         const item: CanvasItem = {
           id,
           type: 'terminal',
-          x: snap(spawn.x),
-          y: snap(spawn.y),
+          x: safeSnap(spawn.x),
+          y: safeSnap(spawn.y),
           label: makeAutoLabel('terminal', getTerminalAutoBase(session)),
           ptyId: session.id,
           agentId,
@@ -861,8 +865,8 @@ export const useCanvasStore = create<CanvasState>()(
       const item: CanvasItem = {
         id,
         type,
-        x: snap(x),
-        y: snap(y),
+        x: safeSnap(x),
+        y: safeSnap(y),
         label: makeAutoLabel(type, labels[type]),
         agentId: get().boardAgentId || undefined,
         ...extra,
@@ -889,7 +893,7 @@ export const useCanvasStore = create<CanvasState>()(
     },
 
     moveItem: (id, x, y) => {
-      const sx = snap(x), sy = snap(y);
+      const sx = safeSnap(x), sy = safeSnap(y);
       set((s) => ({
         items: s.items.map((i) => {
           if (i.id !== id) return i;
@@ -912,7 +916,7 @@ export const useCanvasStore = create<CanvasState>()(
     moveItems: (positions) => {
       const currentItems = get().items;
       const snappedPositions = Object.fromEntries(
-        Object.entries(positions).map(([id, pos]) => [id, { x: snap(pos.x), y: snap(pos.y) }]),
+        Object.entries(positions).map(([id, pos]) => [id, { x: safeSnap(pos.x), y: safeSnap(pos.y) }]),
       );
 
       set((s) => ({
@@ -1016,8 +1020,8 @@ export const useCanvasStore = create<CanvasState>()(
             i.id === id
               ? {
                   ...i,
-                  x: snap(next.x),
-                  y: snap(next.y),
+                  x: safeSnap(next.x),
+                  y: safeSnap(next.y),
                   pinned: false,
                   pinnedViewportX: undefined,
                   pinnedViewportY: undefined,
