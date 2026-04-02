@@ -303,6 +303,33 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
         {draggingId && (() => {
           const item = items.find((i) => i.id === draggingId);
           if (!item) return null;
+
+          // Splitter ghost — full width bar
+          if (item.type === 'anchor') {
+            return (
+              <div
+                className="fixed pointer-events-none z-[100] flex items-center gap-2 rounded-lg shadow-2xl"
+                style={{
+                  width: COLS * CELL + (COLS - 1) * GAP,
+                  height: 40,
+                  left: dragPos.x - dragOffset.x,
+                  top: dragPos.y - dragOffset.y,
+                  padding: '0 12px',
+                  background: 'var(--canvas-border, #3b3a32)',
+                  border: '2px solid var(--canvas-accent, #d4a574)',
+                  opacity: 0.9,
+                }}
+              >
+                <div className="flex-1 h-px bg-canvas-muted/30" />
+                <span className="text-xs text-canvas-accent font-semibold uppercase tracking-wider px-2">
+                  {getCanvasItemTitle(item)}
+                </span>
+                <div className="flex-1 h-px bg-canvas-muted/30" />
+              </div>
+            );
+          }
+
+          // Regular icon ghost
           return (
             <div
               className="fixed pointer-events-none z-[100] flex flex-col items-center justify-center rounded-xl shadow-2xl"
