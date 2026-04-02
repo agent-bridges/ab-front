@@ -16,6 +16,7 @@ import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import { getViewportSpawnPosition } from '../utils/canvasViewport';
 import { CREATE_ITEMS, createCanvasItemAtPosition } from './createItems';
 import ConnectionSettingsModal from './ConnectionSettingsModal';
+import MobileConnectionPanel from './MobileConnectionPanel';
 
 const APP_VERSION = '0.1.0';
 const SEARCH_LIMIT = 10;
@@ -465,7 +466,7 @@ export default function Toolbar() {
           </div>
         </div>
       )}
-      <ConnectionSettingsModal open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
+      <MobileConnectionPanel open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
       </>
     );
   }
