@@ -812,16 +812,19 @@ export const useCanvasStore = create<CanvasState>()(
         const id = `pty-${session.id}`;
         const saved = layout[id];
         const idx = allCount + brandNew.length;
+        const isMobileNow = window.innerWidth < 768;
         const spawn = saved
           ? { x: saved.x, y: saved.y }
-          : getViewportSpawnPosition({
-              panX: get().panX,
-              panY: get().panY,
-              zoom: get().zoom,
-              index: idx,
-              isMobile: window.innerWidth < 768,
-              canvasRoot: document.querySelector<HTMLElement>('[data-canvas-root="true"]'),
-            });
+          : isMobileNow
+            ? { x: 100 + (idx % 5) * 200, y: 100 + Math.floor(idx / 5) * 200 }
+            : getViewportSpawnPosition({
+                panX: get().panX,
+                panY: get().panY,
+                zoom: get().zoom,
+                index: idx,
+                isMobile: false,
+                canvasRoot: document.querySelector<HTMLElement>('[data-canvas-root="true"]'),
+              });
         const item: CanvasItem = {
           id,
           type: 'terminal',
