@@ -45,11 +45,20 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
 
+  // Reset order when agent changes
+  const prevAgentRef = useRef(currentAgentId);
+  useEffect(() => {
+    if (prevAgentRef.current !== currentAgentId) {
+      setOrder([]);
+      prevAgentRef.current = currentAgentId;
+    }
+  }, [currentAgentId]);
+
   // Sync order with items
   useEffect(() => {
     setOrder((prev) => {
       const ids = items.map((i) => i.id);
-      // Keep existing order, add new items at end, remove deleted
+      if (prev.length === 0) return ids;
       const kept = prev.filter((id) => ids.includes(id));
       const newIds = ids.filter((id) => !kept.includes(id));
       return [...kept, ...newIds];
