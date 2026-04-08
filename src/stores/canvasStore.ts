@@ -578,10 +578,8 @@ function loadBoardRuntimeSnapshot(agentId?: string | null): BoardRuntimeSnapshot
 
 function saveBoardRuntimeSnapshot(agentId: string | null, items: CanvasItem[]) {
   if (!agentId) return;
-  // Only cache terminals confirmed alive by PTY daemon — prevents stale ghosts on reload
-  const cacheItems = items.filter((i) => i.type !== 'terminal' || i.ptyAlive === true);
   boardRuntimeCache.set(agentId, {
-    items: cacheItems.map(cloneCanvasItem),
+    items: items.map(cloneCanvasItem),
   });
 }
 
