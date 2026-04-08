@@ -16,17 +16,14 @@ interface Props {
 }
 
 export default function MobileIconGrid({ onOpenItem }: Props) {
-  const allItems = useCanvasStore((s) => s.items);
-  const boardAgentId = useCanvasStore((s) => s.boardAgentId);
+  const rawItems = useCanvasStore((s) => s.items);
+  // On mobile: hide cached terminals not yet confirmed by PTY daemon
+  const items = rawItems.filter((i) => i.type !== 'terminal' || i.ptyAlive !== undefined);
   const openWindow = useCanvasStore((s) => s.openWindow);
   const removeItem = useCanvasStore((s) => s.removeItem);
   const updateItem = useCanvasStore((s) => s.updateItem);
   const addItem = useCanvasStore((s) => s.addItem);
-  const loaded = useCanvasStore((s) => s.loaded);
   const currentAgentId = useAgentStore((s) => s.currentAgentId);
-
-  // Only show items belonging to current board agent
-  const items = loaded ? allItems.filter((i) => !i.agentId || i.agentId === boardAgentId) : [];
   const [showCreate, setShowCreate] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
