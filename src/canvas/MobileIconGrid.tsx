@@ -16,9 +16,7 @@ interface Props {
 }
 
 export default function MobileIconGrid({ onOpenItem }: Props) {
-  const rawItems = useCanvasStore((s) => s.items);
-  // On mobile: hide cached terminals not yet confirmed by PTY daemon
-  const items = rawItems.filter((i) => i.type !== 'terminal' || i.ptyAlive !== undefined);
+  const items = useCanvasStore((s) => s.items);
   const openWindow = useCanvasStore((s) => s.openWindow);
   const removeItem = useCanvasStore((s) => s.removeItem);
   const updateItem = useCanvasStore((s) => s.updateItem);
