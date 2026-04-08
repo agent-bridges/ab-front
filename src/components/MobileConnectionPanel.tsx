@@ -58,11 +58,11 @@ export default function MobileConnectionPanel({ open, onClose }: Props) {
     setError('');
     try {
       if (editId === 'new') {
-        const created = await createAgent(form.name.trim(), form.ip.trim(), form.jwt_key.trim() || undefined);
+        const created = await createAgent({ name: form.name.trim(), ip: form.ip.trim(), jwt_key: form.jwt_key.trim() });
         await loadAgents();
         if (created?.id) setCurrentAgent(created.id);
       } else if (editId) {
-        await updateAgent(editId, { name: form.name.trim(), ip: form.ip.trim(), jwt_key: form.jwt_key.trim() || undefined });
+        await updateAgent(editId, { name: form.name.trim(), ip: form.ip.trim(), jwt_key: form.jwt_key.trim() });
         await loadAgents();
         refreshCurrentAgentBoard();
       }
@@ -78,7 +78,8 @@ export default function MobileConnectionPanel({ open, onClose }: Props) {
     setTesting(true);
     setTestResult(null);
     try {
-      const ok = await checkPtyDaemon(form.ip.trim(), form.jwt_key.trim() || undefined);
+      const result = await checkPtyDaemon(form.ip.trim(), form.jwt_key.trim());
+      const ok = result?.ok;
       setTestResult(ok ? 'Connected' : 'Failed');
     } catch {
       setTestResult('Failed');
