@@ -5,6 +5,7 @@ import { authFetch } from '../api/client';
 const FONT_SIZE_KEY = 'ab-terminal-font-size';
 const SCROLL_SPEED_KEY = 'ab-touch-scroll-speed';
 const THEME_KEY = 'ab-theme';
+const ICONS_PER_ROW_KEY = 'ab-mobile-icons-per-row';
 
 function load(key: string, fallback: number): number {
   try { const v = localStorage.getItem(key); return v ? Number(v) : fallback; } catch { return fallback; }
@@ -17,6 +18,7 @@ function save(key: string, value: number) {
 export function MobileVisualPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [fontSize, setFontSize] = useState(() => load(FONT_SIZE_KEY, 14));
   const [scrollSpeed, setScrollSpeed] = useState(() => load(SCROLL_SPEED_KEY, 5));
+  const [iconsPerRow, setIconsPerRow] = useState(() => load(ICONS_PER_ROW_KEY, 5));
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try { return (localStorage.getItem(THEME_KEY) as 'dark' | 'light') || 'dark'; } catch { return 'dark'; }
   });
@@ -30,6 +32,11 @@ export function MobileVisualPanel({ open, onClose }: { open: boolean; onClose: (
     save(SCROLL_SPEED_KEY, scrollSpeed);
     window.dispatchEvent(new CustomEvent('ab-settings-change', { detail: { scrollSpeed } }));
   }, [scrollSpeed]);
+
+  useEffect(() => {
+    save(ICONS_PER_ROW_KEY, iconsPerRow);
+    window.dispatchEvent(new CustomEvent('ab-settings-change', { detail: { iconsPerRow } }));
+  }, [iconsPerRow]);
 
   useEffect(() => {
     try { localStorage.setItem(THEME_KEY, theme); } catch {}
@@ -92,6 +99,18 @@ export function MobileVisualPanel({ open, onClose }: { open: boolean; onClose: (
                 style={{ accentColor: 'var(--canvas-accent, #d4a574)' }}
               />
               <div className="w-8 h-6 flex items-center justify-center rounded border border-canvas-border text-[11px] text-canvas-text bg-canvas-bg">{scrollSpeed}x</div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[11px] text-canvas-muted mb-2">Icons Per Row</div>
+            <div className="flex items-center gap-3">
+              <input type="range" min={3} max={8} value={iconsPerRow}
+                onChange={(e) => setIconsPerRow(Number(e.target.value))}
+                className="flex-1 h-1 rounded-full appearance-none bg-canvas-border cursor-pointer"
+                style={{ accentColor: 'var(--canvas-accent, #d4a574)' }}
+              />
+              <div className="w-8 h-6 flex items-center justify-center rounded border border-canvas-border text-[11px] text-canvas-text bg-canvas-bg">{iconsPerRow}</div>
             </div>
           </div>
         </div>

@@ -7,9 +7,14 @@ import ItemIcon from '../components/ItemIcon';
 import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import type { CanvasItem } from '../types';
 
-const COLS = 5;
+const DEFAULT_COLS = 5;
+const COLS_KEY = 'ab-mobile-icons-per-row';
 const CELL = 72;
 const GAP = 6;
+
+function loadCols(): number {
+  try { const v = localStorage.getItem(COLS_KEY); return v ? Number(v) : DEFAULT_COLS; } catch { return DEFAULT_COLS; }
+}
 
 interface Props {
   onOpenItem: (id: string) => void;
@@ -22,6 +27,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const updateItem = useCanvasStore((s) => s.updateItem);
   const addItem = useCanvasStore((s) => s.addItem);
   const currentAgentId = useAgentStore((s) => s.currentAgentId);
+  const [cols, setCols] = useState(loadCols);
   const [showCreate, setShowCreate] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ itemId: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -44,6 +50,16 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Listen for icons-per-row changes
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const v = (e as CustomEvent).detail?.iconsPerRow;
+      if (v) setCols(v);
+    };
+    window.addEventListener('ab-settings-change', handler);
+    return () => window.removeEventListener('ab-settings-change', handler);
+  }, []);
 
   // Reset order when agent changes
   const prevAgentRef = useRef(currentAgentId);
@@ -177,7 +193,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
         ref={gridRef}
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${COLS}, ${CELL}px)`,
+          gridTemplateColumns: `repeat(${cols}, ${CELL}px)`,
           gap: GAP,
           justifyContent: 'center',
           position: 'relative',
@@ -319,7 +335,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
               <div
                 className="fixed pointer-events-none z-[100] flex items-center gap-2 rounded-lg shadow-2xl"
                 style={{
-                  width: COLS * CELL + (COLS - 1) * GAP,
+                  width: cols * CELL + (cols - 1) * GAP,
                   height: 40,
                   left: dragPos.x - dragOffset.x,
                   top: dragPos.y - dragOffset.y,
