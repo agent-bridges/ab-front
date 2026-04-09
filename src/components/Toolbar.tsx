@@ -36,7 +36,7 @@ function BrandMark() {
 
 function LogoutDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60" onClick={onCancel}>
+    <div className="fixed inset-0 z-[100200] flex items-center justify-center bg-black/60" onClick={onCancel}>
       <div className="w-full max-w-xs rounded-xl border border-canvas-border bg-canvas-surface shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-3">
           <LogOut size={20} className="text-canvas-accent" />
