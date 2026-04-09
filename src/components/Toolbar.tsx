@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ZoomIn, ZoomOut, Maximize, Terminal,
   Columns3, Rows3, LayoutGrid, Menu, X, AppWindow, XSquare, LogOut, Minus, Map, MapPin,
-  Save, Download, Trash2, Settings2, Search, GripVertical,
+  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useCanvasStore } from '../stores/canvasStore';
@@ -17,6 +17,7 @@ import { getViewportSpawnPosition } from '../utils/canvasViewport';
 import { CREATE_ITEMS, createCanvasItemAtPosition } from './createItems';
 import ConnectionSettingsModal from './ConnectionSettingsModal';
 import MobileConnectionPanel from './MobileConnectionPanel';
+import MobileSettingsPanel from './MobileSettingsPanel';
 
 const APP_VERSION = '0.1.0';
 const SEARCH_LIMIT = 10;
@@ -46,6 +47,7 @@ export default function Toolbar() {
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [dragMode, setDragMode] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
@@ -431,6 +433,15 @@ export default function Toolbar() {
 
               <div className="h-px bg-canvas-border my-1" />
               <button
+                onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}
+                className="w-full flex items-center gap-2 px-2 py-2 hover:bg-canvas-border rounded text-canvas-muted"
+              >
+                <Wrench size={16} />
+                <span className="text-xs">Settings</span>
+              </button>
+
+              <div className="h-px bg-canvas-border my-1" />
+              <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 px-2 py-2 hover:bg-canvas-border rounded text-canvas-muted"
               >
@@ -467,6 +478,7 @@ export default function Toolbar() {
         </div>
       )}
       <MobileConnectionPanel open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
+      <MobileSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </>
     );
   }
