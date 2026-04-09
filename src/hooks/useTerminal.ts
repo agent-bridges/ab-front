@@ -7,13 +7,14 @@ import { authFetch } from '../api/client';
 import { PtyConnection } from '../api/websocket';
 import { getCache, evictOldest } from '../components/terminal/TerminalCache';
 import type { CachedTerminal } from '../components/terminal/TerminalCache';
+import { getTerminalFontSize } from '../components/MobileSettingsPanel';
 
 const TERMINAL_OPTIONS = {
   cursorBlink: true,
   cursorStyle: 'block' as const,
   cursorInactiveStyle: 'outline' as const,
   fontFamily: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-  fontSize: 13,
+  fontSize: getTerminalFontSize(),
   lineHeight: 1.2,
   scrollback: 10000,
   scrollSensitivity: 3,
@@ -365,7 +366,18 @@ export function useTerminal(
       resizeObserver.current.observe(wrapper);
     }
 
+    // Listen for font size changes from settings
+    const handleSettingsChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.fontSize && activeCached.current) {
+        activeCached.current.terminal.options.fontSize = detail.fontSize;
+        activeCached.current.fitAddon.fit();
+      }
+    };
+    window.addEventListener('ab-settings-change', handleSettingsChange);
+
     return () => {
+      window.removeEventListener('ab-settings-change', handleSettingsChange);
       resizeObserver.current?.disconnect();
       if (resizeFrame.current !== null) {
         cancelAnimationFrame(resizeFrame.current);
