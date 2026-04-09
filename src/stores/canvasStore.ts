@@ -692,6 +692,8 @@ export const useCanvasStore = create<CanvasState>()(
           const saved = layout[item.id];
           return {
             ...item,
+            x: saved?.x ?? item.x ?? 0,
+            y: saved?.y ?? item.y ?? 0,
             window: saved?.window || item.window || undefined,
             pinned: saved?.pinned ?? item.pinned,
             pinnedViewportX: saved?.pinnedViewportX ?? item.pinnedViewportX,

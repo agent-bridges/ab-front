@@ -49,8 +49,6 @@ export async function upsertCanvasItem(item: CanvasItem, agentId?: string | null
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       type: item.type,
-      x: item.x,
-      y: item.y,
       label: item.label,
       ptyId: item.ptyId,
       agentId: scopedAgentId,
@@ -77,8 +75,6 @@ export async function syncCanvasItems(items: CanvasItem[], agentId?: string | nu
       items: items.map((i) => ({
         id: i.id,
         type: i.type,
-        x: i.x,
-        y: i.y,
         label: i.label,
         ptyId: i.ptyId,
         agentId: i.agentId ?? agentId ?? undefined,
