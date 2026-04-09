@@ -677,7 +677,10 @@ export const useCanvasStore = create<CanvasState>()(
       });
 
       try {
-        const items = await fetchCanvasItems(agentId);
+        const allItems = await fetchCanvasItems(agentId);
+        // Terminal items come from syncTerminals (websocket), not from board_items API
+        // Only load non-PTY items here to avoid stale terminal ghosts
+        const items = allItems.filter((item) => item.type !== 'terminal');
         const layout = loadLayout(agentId);
         if (get().boardAgentId !== agentId) {
           return;
