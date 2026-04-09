@@ -18,6 +18,7 @@ import { CREATE_ITEMS, createCanvasItemAtPosition } from './createItems';
 import ConnectionSettingsModal from './ConnectionSettingsModal';
 import MobileConnectionPanel from './MobileConnectionPanel';
 import MobileSettingsPanel from './MobileSettingsPanel';
+import SettingsModal from './SettingsModal';
 
 const APP_VERSION = '0.1.0';
 const SEARCH_LIMIT = 10;
@@ -855,7 +856,7 @@ export default function Toolbar() {
       </div>
     )}
     <ConnectionSettingsModal open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
-    <MobileSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     {logoutConfirmOpen && <LogoutDialog onConfirm={confirmLogout} onCancel={() => setLogoutConfirmOpen(false)} />}
     </>
   );
