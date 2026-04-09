@@ -366,12 +366,15 @@ export function useTerminal(
       resizeObserver.current.observe(wrapper);
     }
 
-    // Listen for font size changes from settings
+    // Listen for font size changes from settings — apply to ALL cached terminals
     const handleSettingsChange = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.fontSize && activeCached.current) {
-        activeCached.current.terminal.options.fontSize = detail.fontSize;
-        activeCached.current.fitAddon.fit();
+      if (detail?.fontSize) {
+        const cache = getCache();
+        for (const cached of cache.values()) {
+          cached.term.options.fontSize = detail.fontSize;
+          cached.fitAddon.fit();
+        }
       }
     };
     window.addEventListener('ab-settings-change', handleSettingsChange);

@@ -627,6 +627,9 @@ export default function Toolbar() {
       </div>
 
       <div className="h-4 w-px bg-canvas-border mx-1 shrink-0" />
+      <button onClick={() => setSettingsOpen(true)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Settings">
+        <Wrench size={14} className="text-canvas-accent" />
+      </button>
       <button onClick={handleLogout} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Logout">
         <LogOut size={14} className="text-canvas-accent" />
       </button>
@@ -815,6 +818,7 @@ export default function Toolbar() {
       </div>
     )}
     <ConnectionSettingsModal open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
+    <MobileSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }
