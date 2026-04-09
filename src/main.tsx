@@ -12,4 +12,14 @@ if (import.meta.env.DEV) {
   }
 }
 
+// Apply saved theme
+const savedTheme = localStorage.getItem('ab-theme') || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+// Listen for theme changes
+window.addEventListener('ab-settings-change', (e) => {
+  const theme = (e as CustomEvent).detail?.theme;
+  if (theme) document.documentElement.setAttribute('data-theme', theme);
+});
+
 createRoot(document.getElementById('root')!).render(<App />);
