@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ZoomIn, ZoomOut, Maximize, Terminal,
   Columns3, Rows3, LayoutGrid, Menu, X, AppWindow, XSquare, LogOut, Minus, Map, MapPin,
-  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench,
+  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useCanvasStore } from '../stores/canvasStore';
@@ -17,7 +17,7 @@ import { getViewportSpawnPosition } from '../utils/canvasViewport';
 import { CREATE_ITEMS, createCanvasItemAtPosition } from './createItems';
 import ConnectionSettingsModal from './ConnectionSettingsModal';
 import MobileConnectionPanel from './MobileConnectionPanel';
-import MobileSettingsPanel from './MobileSettingsPanel';
+import { MobileVisualPanel, MobileAccountPanel } from './MobileSettingsPanel';
 import SettingsModal from './SettingsModal';
 
 const APP_VERSION = '0.1.0';
@@ -79,6 +79,8 @@ export default function Toolbar() {
   const [dragMode, setDragMode] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
@@ -407,75 +409,23 @@ export default function Toolbar() {
               </div>
 
               <div className="h-px bg-canvas-border my-1" />
-              <div className="text-[10px] text-canvas-muted px-2 py-1 uppercase tracking-wider">Layout</div>
-              <div className="px-2 py-1">
-                <button
-                  onClick={() => cycleLayoutScope()}
-                  className="rounded border border-canvas-border px-2 py-1 text-[11px] text-canvas-text hover:bg-canvas-border"
-                  title="Cycle layout scope"
-                >
-                  Scope: {LAYOUT_SCOPE_LABEL[layoutScope]}
-                </button>
-              </div>
+              <div className="text-[10px] text-canvas-muted px-2 py-1 uppercase tracking-wider">Settings</div>
               <div className="flex gap-1 px-2">
-                <button onClick={() => { tileWindows('columns', layoutScope); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Columns">
-                  <Columns3 size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { tileWindows('rows', layoutScope); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Rows">
-                  <Rows3 size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { tileWindows('grid', layoutScope); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Grid">
-                  <LayoutGrid size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { fitAllWindows(layoutScope); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Show All">
-                  <AppWindow size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { setMinimapVisible(!minimapVisible); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title={minimapVisible ? 'Hide map' : 'Show map'}>
-                  <Map size={18} className={minimapVisible ? 'text-canvas-accent' : 'text-canvas-muted'} />
-                </button>
-                <button onClick={() => { void openSaveLayoutModal(); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Save layout">
-                  <Save size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { void openLoadLayoutModal(); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Load layout">
-                  <Download size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { minimizeAllWindows(layoutScope); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Minimize All">
-                  <Minus size={18} className="text-canvas-muted" />
-                </button>
-                <button onClick={() => { closeAllWindows(layoutScope); setMenuOpen(false); }} className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded" title="Close All">
-                  <XSquare size={18} className="text-canvas-muted" />
-                </button>
-              </div>
-
-              <div className="h-px bg-canvas-border my-1" />
-              <div className="text-[10px] text-canvas-muted px-2 py-1 uppercase tracking-wider">Zoom</div>
-              <div className="flex items-center gap-1 px-2 py-1">
-                <button onClick={() => applyViewportZoom(zoom - 0.1)} className="p-1.5 hover:bg-canvas-border rounded">
-                  <ZoomOut size={16} className="text-canvas-muted" />
+                <button
+                  onClick={() => { setVisualSettingsOpen(true); setMenuOpen(false); }}
+                  className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded"
+                  title="Visual"
+                >
+                  <Wrench size={18} className="text-canvas-accent" />
                 </button>
                 <button
-                  onClick={() => applyViewportZoom(1)}
-                  className="text-xs text-canvas-muted flex-1 text-center hover:text-canvas-accent"
-                  title="Reset zoom to 100%"
+                  onClick={() => { setAccountSettingsOpen(true); setMenuOpen(false); }}
+                  className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded"
+                  title="Account"
                 >
-                  {Math.round(zoom * 100)}%
-                </button>
-                <button onClick={() => applyViewportZoom(zoom + 0.1)} className="p-1.5 hover:bg-canvas-border rounded">
-                  <ZoomIn size={16} className="text-canvas-muted" />
-                </button>
-                <button onClick={handleFitIcons} className="p-1.5 hover:bg-canvas-border rounded" title="Fit icons">
-                  <Maximize size={16} className="text-canvas-muted" />
+                  <User size={18} className="text-canvas-accent" />
                 </button>
               </div>
-
-              <div className="h-px bg-canvas-border my-1" />
-              <button
-                onClick={() => { setSettingsOpen(true); setMenuOpen(false); }}
-                className="w-full flex items-center gap-2 px-2 py-2 hover:bg-canvas-border rounded text-canvas-muted"
-              >
-                <Wrench size={16} />
-                <span className="text-xs">Settings</span>
-              </button>
 
               <div className="h-px bg-canvas-border my-1" />
               <button
@@ -515,7 +465,8 @@ export default function Toolbar() {
         </div>
       )}
       <MobileConnectionPanel open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
-      <MobileSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <MobileVisualPanel open={visualSettingsOpen} onClose={() => setVisualSettingsOpen(false)} />
+      <MobileAccountPanel open={accountSettingsOpen} onClose={() => setAccountSettingsOpen(false)} />
       {logoutConfirmOpen && <LogoutDialog onConfirm={confirmLogout} onCancel={() => setLogoutConfirmOpen(false)} />}
       </>
     );
