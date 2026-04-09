@@ -285,7 +285,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
                 />
               ) : (
                 <span
-                  className="truncate text-center font-semibold leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)] mt-1"
+                  className="truncate text-center font-semibold leading-tight text-canvas-text mt-1"
                   style={{ maxWidth: CELL - 8, fontSize: 10 }}
                 >
                   {getCanvasItemTitle(item)}
@@ -354,7 +354,7 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
             >
               <ItemIcon item={item} size={24} />
               <span
-                className="truncate text-center font-semibold leading-tight text-white mt-1"
+                className="truncate text-center font-semibold leading-tight text-canvas-text mt-1"
                 style={{ maxWidth: CELL - 8, fontSize: 10 }}
               >
                 {getCanvasItemTitle(item)}

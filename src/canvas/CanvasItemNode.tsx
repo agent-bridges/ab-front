@@ -257,7 +257,7 @@ export default function CanvasItemNode({
             onPointerDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className="truncate text-center font-semibold leading-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" style={{ maxWidth: 76 * iconScale, fontSize: `${11 * iconScale}px` }}>
+          <span className="truncate text-center font-semibold leading-tight text-canvas-text" style={{ maxWidth: 76 * iconScale, fontSize: `${11 * iconScale}px` }}>
             {displayTitle}
           </span>
         )}
