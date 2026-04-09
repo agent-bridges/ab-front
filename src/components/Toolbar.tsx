@@ -33,6 +33,36 @@ function BrandMark() {
   );
 }
 
+function LogoutDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60" onClick={onCancel}>
+      <div className="w-full max-w-xs rounded-xl border border-canvas-border bg-canvas-surface shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-3">
+          <LogOut size={20} className="text-canvas-accent" />
+          <div className="text-sm font-semibold text-canvas-text">Sign out?</div>
+        </div>
+        <div className="text-xs text-canvas-muted mb-5">
+          Active terminal sessions will continue running. You can reconnect after signing back in.
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onCancel}
+            className="rounded-md border border-canvas-border px-4 py-1.5 text-xs text-canvas-text hover:bg-canvas-border"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="rounded-md bg-canvas-accent/20 border border-canvas-accent px-4 py-1.5 text-xs text-canvas-accent font-semibold hover:bg-canvas-accent/30"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Toolbar() {
   const { agents, currentAgentId, setCurrentAgent } = useAgentStore();
   const {
@@ -48,6 +78,7 @@ export default function Toolbar() {
   const [dragMode, setDragMode] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
   const [saveLayoutOpen, setSaveLayoutOpen] = useState(false);
@@ -144,7 +175,12 @@ export default function Toolbar() {
     setMenuOpen(false);
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
+    setLogoutConfirmOpen(true);
+  };
+
+  const confirmLogout = async () => {
+    setLogoutConfirmOpen(false);
     await logoutRequest();
     authLogout();
     window.location.reload();
@@ -479,6 +515,7 @@ export default function Toolbar() {
       )}
       <MobileConnectionPanel open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
       <MobileSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {logoutConfirmOpen && <LogoutDialog onConfirm={confirmLogout} onCancel={() => setLogoutConfirmOpen(false)} />}
       </>
     );
   }
@@ -819,6 +856,7 @@ export default function Toolbar() {
     )}
     <ConnectionSettingsModal open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
     <MobileSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    {logoutConfirmOpen && <LogoutDialog onConfirm={confirmLogout} onCancel={() => setLogoutConfirmOpen(false)} />}
     </>
   );
 }
