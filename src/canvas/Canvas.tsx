@@ -55,13 +55,14 @@ function getRenderableBounds(items: CanvasItem[]) {
   let maxY = Number.NEGATIVE_INFINITY;
 
   for (const item of items) {
-    if (item.pinned) {
-      continue;
+    // Pinned items: their icon is not on the canvas (it lives in the viewport-pinned
+    // overlay), but include their open-window bounds so they appear on the minimap.
+    if (!item.pinned) {
+      minX = Math.min(minX, item.x);
+      minY = Math.min(minY, item.y);
+      maxX = Math.max(maxX, item.x + ITEM_SIZE);
+      maxY = Math.max(maxY, item.y + ITEM_SIZE);
     }
-    minX = Math.min(minX, item.x);
-    minY = Math.min(minY, item.y);
-    maxX = Math.max(maxX, item.x + ITEM_SIZE);
-    maxY = Math.max(maxY, item.y + ITEM_SIZE);
 
     if (item.window?.isOpen) {
       minX = Math.min(minX, item.window.x);
@@ -242,7 +243,9 @@ export default function Canvas() {
   const minimapModel = useMemo(() => {
     if (isMobile) return null;
 
-    const minimapItems = items.filter((item) => !item.pinned);
+    // Exclude pinned items from the minimap unless their window is open —
+    // in that case the window rectangle should still appear on the map.
+    const minimapItems = items.filter((item) => !item.pinned || item.window?.isOpen);
     const bounds = getRenderableBounds(minimapItems);
     const el = containerRef.current;
     if (!bounds || !el) return null;
@@ -956,10 +959,13 @@ export default function Canvas() {
                 const minimapStyle = getMinimapStatusStyle(item);
                 return (
                   <div key={`minimap-item-${item.id}`}>
-                    <div
-                      className={`absolute rounded-sm border ${minimapStyle.itemClass}`}
-                      style={{ left: baseX, top: baseY, width: iconW, height: iconH }}
-                    />
+                    {/* Pinned items have no icon on the canvas — only draw the icon dot for non-pinned. */}
+                    {!item.pinned && (
+                      <div
+                        className={`absolute rounded-sm border ${minimapStyle.itemClass}`}
+                        style={{ left: baseX, top: baseY, width: iconW, height: iconH }}
+                      />
+                    )}
                     {item.window?.isOpen && (
                       <div
                         className={`absolute rounded-sm border ${minimapStyle.windowClass}`}

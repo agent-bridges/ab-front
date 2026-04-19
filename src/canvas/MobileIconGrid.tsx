@@ -138,11 +138,11 @@ export default function MobileIconGrid({ onOpenItem }: Props) {
     const relX = clientX - rect.left;
     const relY = clientY - rect.top;
     if (relX < 0 || relY < 0) return 0;
-    const col = Math.min(Math.floor(relX / cellW), COLS - 1);
+    const col = Math.min(Math.floor(relX / cellW), cols - 1);
     const row = Math.floor(relY / cellH);
-    const idx = row * COLS + col;
+    const idx = row * cols + col;
     return Math.max(0, Math.min(idx, orderedItems.length - 1));
-  }, [orderedItems.length]);
+  }, [cols, orderedItems.length]);
 
   const handleDragStart = (itemId: string, e: React.PointerEvent) => {
     if (!dragMode) return;

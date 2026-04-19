@@ -103,7 +103,6 @@ export default function App() {
   // PTY sessions -> canvas terminal items (sessions are source of truth)
   useEffect(() => {
     if (!currentAgentId) return;
-
     const conn = new PtyStateConnection(currentAgentId);
     conn.setOnSessions((sessions) => {
       syncTerminals(sessions, currentAgentId);

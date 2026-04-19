@@ -510,7 +510,7 @@ interface CanvasState {
   loadItems: (agentId: string | null) => Promise<void>;
   syncTerminals: (sessions: PtySession[], agentId: string) => void;
   addItem: (type: CanvasItemType, x: number, y: number, extra?: Partial<CanvasItem>) => string;
-  removeItem: (id: string) => void;
+  removeItem: (id: string) => Promise<void>;
   moveItem: (id: string, x: number, y: number) => void;
   moveItems: (positions: Record<string, { x: number; y: number }>) => void;
   updateItem: (id: string, patch: Partial<CanvasItem>) => void;
@@ -583,6 +583,43 @@ function saveBoardRuntimeSnapshot(agentId: string | null, items: CanvasItem[]) {
   });
 }
 
+/** Apply localStorage coordinates to PTY items. Items without saved coords get defaults. */
+function applyLayoutToItems(ptyItems: CanvasItem[], agentId: string): CanvasItem[] {
+  const layout = loadLayout(agentId);
+  return ptyItems.map((rawItem) => {
+    const item = normalizeLegacyAutoLabel({
+      ...rawItem,
+      agentId: rawItem.agentId || agentId,
+    });
+    const saved = layout[item.id];
+    return {
+      ...item,
+      x: saved?.x ?? item.x ?? 0,
+      y: saved?.y ?? item.y ?? 0,
+      window: saved?.window || item.window || undefined,
+      pinned: saved?.pinned ?? item.pinned,
+      pinnedViewportX: saved?.pinnedViewportX ?? item.pinnedViewportX,
+      pinnedViewportY: saved?.pinnedViewportY ?? item.pinnedViewportY,
+    };
+  });
+}
+
+/** Remove localStorage layout entries for items that no longer exist. */
+function cleanStaleLayout(agentId: string, currentItems: CanvasItem[]) {
+  const layout = loadLayout(agentId);
+  const validIds = new Set(currentItems.map((i) => i.id));
+  let changed = false;
+  for (const key of Object.keys(layout)) {
+    if (!validIds.has(key)) {
+      delete layout[key];
+      changed = true;
+    }
+  }
+  if (changed) {
+    localStorage.setItem(`canvas-layout:${agentId}`, JSON.stringify(layout));
+  }
+}
+
 export const useCanvasStore = create<CanvasState>()(
   (set, get) => ({
     boardAgentId: null,
@@ -612,32 +649,26 @@ export const useCanvasStore = create<CanvasState>()(
     loaded: false,
 
     loadItems: async (agentId) => {
+      const resetState = {
+        selectedItemIds: [] as string[],
+        focusedAnchorId: null as string | null,
+        draggingItemIds: [] as string[],
+        draggingWindowId: null as string | null,
+      };
+
       if (!agentId) {
         set({
           boardAgentId: null,
           items: [],
-          selectedItemIds: [],
-          focusedAnchorId: null,
-          draggingItemIds: [],
-          draggingWindowId: null,
-          panX: 0,
-          panY: 0,
-          zoom: 1,
-          minimapVisible: DEFAULT_MINIMAP.visible,
-          minimapWidth: DEFAULT_MINIMAP.width,
-          minimapHeight: DEFAULT_MINIMAP.height,
-          minimapX: DEFAULT_MINIMAP.x,
-          minimapY: DEFAULT_MINIMAP.y,
-          anchorsPanelVisible: DEFAULT_ANCHORS_PANEL.visible,
-          anchorsPanelWidth: DEFAULT_ANCHORS_PANEL.width,
-          anchorsPanelHeight: DEFAULT_ANCHORS_PANEL.height,
-          anchorsPanelX: DEFAULT_ANCHORS_PANEL.x,
-          anchorsPanelY: DEFAULT_ANCHORS_PANEL.y,
+          ...resetState,
+          panX: 0, panY: 0, zoom: 1,
+          minimapVisible: DEFAULT_MINIMAP.visible, minimapWidth: DEFAULT_MINIMAP.width,
+          minimapHeight: DEFAULT_MINIMAP.height, minimapX: DEFAULT_MINIMAP.x, minimapY: DEFAULT_MINIMAP.y,
+          anchorsPanelVisible: DEFAULT_ANCHORS_PANEL.visible, anchorsPanelWidth: DEFAULT_ANCHORS_PANEL.width,
+          anchorsPanelHeight: DEFAULT_ANCHORS_PANEL.height, anchorsPanelX: DEFAULT_ANCHORS_PANEL.x, anchorsPanelY: DEFAULT_ANCHORS_PANEL.y,
           layoutScope: DEFAULT_LAYOUT_SCOPE,
-          rulerLeft: DEFAULT_RULER_LEFT,
-          rulerRight: DEFAULT_RULER_RIGHT,
-          rulerTop: DEFAULT_RULER_TOP,
-          rulerBottom: DEFAULT_RULER_BOTTOM,
+          rulerLeft: DEFAULT_RULER_LEFT, rulerRight: DEFAULT_RULER_RIGHT,
+          rulerTop: DEFAULT_RULER_TOP, rulerBottom: DEFAULT_RULER_BOTTOM,
           loaded: true,
         });
         return;
@@ -647,213 +678,115 @@ export const useCanvasStore = create<CanvasState>()(
       const minimapPrefs = loadMinimapPrefs(agentId);
       const anchorsPanelPrefs = loadAnchorsPanelPrefs(agentId);
       const workspaceUiPrefs = loadWorkspaceUiPrefs(agentId);
+
+      const uiState = {
+        panX: viewport?.panX ?? 0, panY: viewport?.panY ?? 0, zoom: viewport?.zoom ?? 1,
+        minimapVisible: minimapPrefs.visible, minimapWidth: minimapPrefs.width,
+        minimapHeight: minimapPrefs.height, minimapX: minimapPrefs.x, minimapY: minimapPrefs.y,
+        anchorsPanelVisible: anchorsPanelPrefs.visible, anchorsPanelWidth: anchorsPanelPrefs.width,
+        anchorsPanelHeight: anchorsPanelPrefs.height, anchorsPanelX: anchorsPanelPrefs.x, anchorsPanelY: anchorsPanelPrefs.y,
+        layoutScope: workspaceUiPrefs.layoutScope,
+        rulerLeft: workspaceUiPrefs.rulerLeft, rulerRight: workspaceUiPrefs.rulerRight,
+        rulerTop: workspaceUiPrefs.rulerTop, rulerBottom: workspaceUiPrefs.rulerBottom,
+      };
+
+      // Step 1: show from cache instantly
       const cachedSnapshot = loadBoardRuntimeSnapshot(agentId);
       set({
         boardAgentId: agentId,
         items: cachedSnapshot?.items ?? [],
-        selectedItemIds: [],
-        focusedAnchorId: null,
-        draggingItemIds: [],
-        draggingWindowId: null,
-        panX: viewport?.panX ?? 0,
-        panY: viewport?.panY ?? 0,
-        zoom: viewport?.zoom ?? 1,
-        minimapVisible: minimapPrefs.visible,
-        minimapWidth: minimapPrefs.width,
-        minimapHeight: minimapPrefs.height,
-        minimapX: minimapPrefs.x,
-        minimapY: minimapPrefs.y,
-        anchorsPanelVisible: anchorsPanelPrefs.visible,
-        anchorsPanelWidth: anchorsPanelPrefs.width,
-        anchorsPanelHeight: anchorsPanelPrefs.height,
-        anchorsPanelX: anchorsPanelPrefs.x,
-        anchorsPanelY: anchorsPanelPrefs.y,
-        layoutScope: workspaceUiPrefs.layoutScope,
-        rulerLeft: workspaceUiPrefs.rulerLeft,
-        rulerRight: workspaceUiPrefs.rulerRight,
-        rulerTop: workspaceUiPrefs.rulerTop,
-        rulerBottom: workspaceUiPrefs.rulerBottom,
+        ...resetState,
+        ...uiState,
         loaded: false,
       });
 
+      // Step 2: fetch real items from PTY
       try {
-        const items = await fetchCanvasItems(agentId);
-        const layout = loadLayout(agentId);
-        if (get().boardAgentId !== agentId) {
-          return;
-        }
-        const unmigratedItemIds = new Set(items.filter((item) => !item.agentId).map((item) => item.id));
-        // Apply localStorage positions, default to vertical list if missing
-        const cleaned = items.map((rawItem) => {
-          const item = normalizeLegacyAutoLabel({
-            ...rawItem,
-            agentId: rawItem.agentId || agentId,
-          });
-          const saved = layout[item.id];
-          return {
-            ...item,
-            x: saved?.x ?? item.x ?? 0,
-            y: saved?.y ?? item.y ?? 0,
-            window: saved?.window || item.window || undefined,
-            pinned: saved?.pinned ?? item.pinned,
-            pinnedViewportX: saved?.pinnedViewportX ?? item.pinnedViewportX,
-            pinnedViewportY: saved?.pinnedViewportY ?? item.pinnedViewportY,
-          };
-        });
+        const ptyItems = await fetchCanvasItems(agentId);
+        if (get().boardAgentId !== agentId) return;
+
+        const finalItems = applyLayoutToItems(ptyItems, agentId);
+
+        // Clean stale entries from localStorage
+        cleanStaleLayout(agentId, finalItems);
+
+        // Full cache replacement
+        saveBoardRuntimeSnapshot(agentId, finalItems);
+
         set({
           boardAgentId: agentId,
-          items: cleaned,
-          selectedItemIds: [],
-          focusedAnchorId: null,
-          draggingItemIds: [],
-          draggingWindowId: null,
-          panX: viewport?.panX ?? 0,
-          panY: viewport?.panY ?? 0,
-          zoom: viewport?.zoom ?? 1,
-          minimapVisible: minimapPrefs.visible,
-          minimapWidth: minimapPrefs.width,
-          minimapHeight: minimapPrefs.height,
-          minimapX: minimapPrefs.x,
-          minimapY: minimapPrefs.y,
-          anchorsPanelVisible: anchorsPanelPrefs.visible,
-          anchorsPanelWidth: anchorsPanelPrefs.width,
-          anchorsPanelHeight: anchorsPanelPrefs.height,
-          anchorsPanelX: anchorsPanelPrefs.x,
-          anchorsPanelY: anchorsPanelPrefs.y,
-          layoutScope: workspaceUiPrefs.layoutScope,
-          rulerLeft: workspaceUiPrefs.rulerLeft,
-          rulerRight: workspaceUiPrefs.rulerRight,
-          rulerTop: workspaceUiPrefs.rulerTop,
-          rulerBottom: workspaceUiPrefs.rulerBottom,
+          items: finalItems,
+          ...resetState,
+          ...uiState,
           loaded: true,
         });
-
-        for (const item of cleaned) {
-          if (unmigratedItemIds.has(item.id)) {
-            debouncedSave(item);
-          }
-        }
       } catch (e) {
         console.error('Failed to load canvas items:', e);
-        if (get().boardAgentId !== agentId) {
-          return;
-        }
-        const fallbackSnapshot = loadBoardRuntimeSnapshot(agentId);
-        set({
-          boardAgentId: agentId,
-          items: fallbackSnapshot?.items ?? [],
-          selectedItemIds: [],
-          focusedAnchorId: null,
-          draggingItemIds: [],
-          draggingWindowId: null,
-          panX: viewport?.panX ?? 0,
-          panY: viewport?.panY ?? 0,
-          zoom: viewport?.zoom ?? 1,
-          minimapVisible: minimapPrefs.visible,
-          minimapWidth: minimapPrefs.width,
-          minimapHeight: minimapPrefs.height,
-          minimapX: minimapPrefs.x,
-          minimapY: minimapPrefs.y,
-          anchorsPanelVisible: anchorsPanelPrefs.visible,
-          anchorsPanelWidth: anchorsPanelPrefs.width,
-          anchorsPanelHeight: anchorsPanelPrefs.height,
-          anchorsPanelX: anchorsPanelPrefs.x,
-          anchorsPanelY: anchorsPanelPrefs.y,
-          layoutScope: workspaceUiPrefs.layoutScope,
-          rulerLeft: workspaceUiPrefs.rulerLeft,
-          rulerRight: workspaceUiPrefs.rulerRight,
-          rulerTop: workspaceUiPrefs.rulerTop,
-          rulerBottom: workspaceUiPrefs.rulerBottom,
-          loaded: true,
-        });
+        if (get().boardAgentId !== agentId) return;
+        // Keep cache as-is, just mark loaded
+        set({ loaded: true });
       }
     },
 
     syncTerminals: (sessions, agentId) => {
       if (!agentId || get().boardAgentId !== agentId) return;
       const currentItems = get().items;
-      const existingByPtyId = new Map(
-        currentItems.filter((i) => i.type === 'terminal' && i.ptyId).map((i) => [i.ptyId!, i]),
-      );
-
       const sessionMap = new Map(sessions.map((s) => [s.id, s]));
-      const sessionIds = new Set(sessions.map((s) => s.id));
-      const itemsToPersist: CanvasItem[] = [];
 
-      // Update existing items in-place (preserve order)
-      const updated = currentItems
-        .filter((i) => i.type !== 'terminal' || !i.ptyId || sessionIds.has(i.ptyId))
-        .map((i) => {
-          if (i.type !== 'terminal' || !i.ptyId) return i;
-          const session = sessionMap.get(i.ptyId);
-          if (!session) return i;
-          sessionMap.delete(i.ptyId); // mark as handled
-          const nextAutoLabel = makeAutoLabel('terminal', getTerminalAutoBase(session));
-          const shouldPromoteLegacyAuto =
-            !isAutoLabel(i.label) &&
-            (
-              i.label === (session.label || '') ||
-              i.label === (session.name || '') ||
-              i.label === getPathLeafForTitle(session.project_path || '') ||
-              i.label === 'Terminal' ||
-              i.label === 'root'
-            );
-          const nextItem = {
-            ...i,
-            label: isAutoLabel(i.label) || shouldPromoteLegacyAuto ? nextAutoLabel : i.label,
-            currentPath: session.last_cwd || session.project_path || i.currentPath,
-            ptyProcesses: session.processes || [],
-            ptyAlive: session.alive,
-            aiStatus: session.ai_status || '',
-          };
-          if (nextItem.label !== i.label || nextItem.currentPath !== i.currentPath) itemsToPersist.push(nextItem);
-          return nextItem;
+      // Keep non-terminal items as-is.
+      // For terminals: keep only those that have a live session.
+      const kept: CanvasItem[] = [];
+      for (const item of currentItems) {
+        if (item.type !== 'terminal' || !item.ptyId) {
+          kept.push(item);
+          continue;
+        }
+        const session = sessionMap.get(item.ptyId);
+        if (!session) continue; // dead terminal — drop it
+        sessionMap.delete(item.ptyId);
+        kept.push({
+          ...item,
+          label: isAutoLabel(item.label) ? makeAutoLabel('terminal', getTerminalAutoBase(session)) : item.label,
+          currentPath: session.last_cwd || session.project_path || item.currentPath,
+          ptyProcesses: session.processes || [],
+          ptyAlive: session.alive,
+          aiStatus: session.ai_status || '',
         });
+      }
 
-      // Add new sessions that didn't have existing items
-        const layout = loadLayout(agentId);
-      const allCount = updated.length;
-      const brandNew: CanvasItem[] = [];
+      // Add new sessions not yet on canvas
+      const layout = loadLayout(agentId);
       for (const [, session] of sessionMap) {
         const id = `pty-${session.id}`;
         const saved = layout[id];
-        const idx = allCount + brandNew.length;
+        const idx = kept.length;
         const isMobileNow = window.innerWidth < 768;
         const spawn = saved
           ? { x: saved.x, y: saved.y }
           : isMobileNow
             ? { x: 100 + (idx % 5) * 200, y: 100 + Math.floor(idx / 5) * 200 }
             : getViewportSpawnPosition({
-                panX: get().panX,
-                panY: get().panY,
-                zoom: get().zoom,
-                index: idx,
-                isMobile: false,
+                panX: get().panX, panY: get().panY, zoom: get().zoom,
+                index: idx, isMobile: false,
                 canvasRoot: document.querySelector<HTMLElement>('[data-canvas-root="true"]'),
               });
-        const item: CanvasItem = {
-          id,
-          type: 'terminal',
-          x: safeSnap(spawn.x),
-          y: safeSnap(spawn.y),
+        kept.push({
+          id, type: 'terminal',
+          x: safeSnap(spawn.x), y: safeSnap(spawn.y),
           label: makeAutoLabel('terminal', getTerminalAutoBase(session)),
-          ptyId: session.id,
-          agentId,
+          ptyId: session.id, agentId,
           currentPath: session.last_cwd || session.project_path || undefined,
           window: saved?.window,
           ptyProcesses: session.processes || [],
           ptyAlive: session.alive,
           aiStatus: session.ai_status || '',
-        };
-        brandNew.push(item);
-        debouncedSave(item);
+        });
+        debouncedSave(kept[kept.length - 1]);
       }
 
-      // Remove DB records for sessions that no longer exist
-      set({ items: [...updated, ...brandNew] });
-      for (const item of itemsToPersist) {
-        debouncedSave(item);
-      }
+      // Full replacement of items + cache
+      saveBoardRuntimeSnapshot(agentId, kept);
+      set({ items: kept });
     },
 
     addItem: (type, x, y, extra) => {
@@ -878,20 +811,32 @@ export const useCanvasStore = create<CanvasState>()(
       return id;
     },
 
-    removeItem: (id) => {
+    removeItem: async (id) => {
       const item = get().items.find((i) => i.id === id);
+      if (!item) return;
+
+      // For terminals: kill the PTY process first, only remove from canvas on success
+      if (item.type === 'terminal' && item.ptyId && item.agentId) {
+        try {
+          await killPty(item.agentId, item.ptyId);
+        } catch (e) {
+          console.error('Failed to kill PTY:', e);
+          return; // kill failed — keep the icon
+        }
+      } else {
+        try {
+          await deleteCanvasItem(id, get().boardAgentId);
+        } catch (e) {
+          console.error('Failed to delete canvas item:', e);
+          return;
+        }
+      }
+
       set((s) => ({
         items: s.items.filter((i) => i.id !== id),
         selectedItemIds: s.selectedItemIds.filter((selectedId) => selectedId !== id),
         focusedAnchorId: s.focusedAnchorId === id ? null : s.focusedAnchorId,
       }));
-      if (item?.type !== 'terminal') {
-        deleteCanvasItem(id, get().boardAgentId).catch((e) => console.error('Failed to delete canvas item:', e));
-      }
-      // Kill PTY session when removing a terminal item
-      if (item?.type === 'terminal' && item.ptyId && item.agentId) {
-        killPty(item.agentId, item.ptyId).catch((e) => console.error('Failed to kill PTY:', e));
-      }
     },
 
     moveItem: (id, x, y) => {
@@ -1587,6 +1532,4 @@ export const useCanvasStore = create<CanvasState>()(
   }),
 );
 
-useCanvasStore.subscribe((state) => {
-  saveBoardRuntimeSnapshot(state.boardAgentId, state.items);
-});
+// Cache is saved explicitly in loadItems and syncTerminals — no blind subscribe.
