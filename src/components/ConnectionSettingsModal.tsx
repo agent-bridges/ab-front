@@ -199,7 +199,11 @@ export default function ConnectionSettingsModal({ open, onClose }: ConnectionSet
     setStatus('');
     try {
       const result = await checkPtyDaemon(address, jwtKey);
-      setStatus(result.message);
+      if (result.ok) {
+        setStatus(result.message);
+      } else {
+        setError(result.message);
+      }
     } catch (testError) {
       setError(testError instanceof Error ? testError.message : 'Failed to test connection');
     } finally {
