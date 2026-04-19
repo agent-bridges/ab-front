@@ -64,7 +64,9 @@ function getRenderableBounds(items: CanvasItem[]) {
       maxY = Math.max(maxY, item.y + ITEM_SIZE);
     }
 
-    if (item.window?.isOpen) {
+    // Locked windows are viewport-fixed — they have no meaningful world
+    // coords, so skip them for minimap bounds.
+    if (item.window?.isOpen && !item.window.locked) {
       minX = Math.min(minX, item.window.x);
       minY = Math.min(minY, item.window.y);
       maxX = Math.max(maxX, item.window.x + item.window.w);
@@ -966,7 +968,7 @@ export default function Canvas() {
                         style={{ left: baseX, top: baseY, width: iconW, height: iconH }}
                       />
                     )}
-                    {item.window?.isOpen && (
+                    {item.window?.isOpen && !item.window.locked && (
                       <div
                         className={`absolute rounded-sm border ${minimapStyle.windowClass}`}
                         style={{

@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Minus, RefreshCw, Terminal, FolderOpen, StickyNote, X, Eye, Pencil, Lock, Unlock, MapPin } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -43,7 +44,7 @@ export default function Window({
   zoom?: number;
 }) {
   const win = item.window!;
-  const { closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, toggleWindowLocked, panX, panY } = useCanvasStore();
+  const { closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, toggleWindowLocked, moveLockedWindow, panX, panY } = useCanvasStore();
   const draggingWindowId = useCanvasStore((s) => s.draggingWindowId);
   const startDraggingWindow = useCanvasStore((s) => s.startDraggingWindow);
   const stopDraggingWindow = useCanvasStore((s) => s.stopDraggingWindow);
@@ -58,25 +59,41 @@ export default function Window({
   const terminalMeta = item.type === 'terminal' ? getTerminalStatusMeta(item.ptyAlive, item.ptyProcesses, item.aiStatus) : null;
   const terminalDetail = terminalMeta ? getTerminalStatusDetail(terminalMeta) : null;
 
-  // Title bar drag
-  const dragRef = useRef({ dragging: false, startX: 0, startY: 0, winX: 0, winY: 0 });
+  // Title bar drag. When the window is viewport-locked, we update screen-pixel
+  // coords via moveLockedWindow instead of world coords.
+  const lockedViewport = win.locked && typeof win.lockedViewportX === 'number' && typeof win.lockedViewportY === 'number';
+  const dragRef = useRef({ dragging: false, startX: 0, startY: 0, winX: 0, winY: 0, locked: false });
 
   const onTitlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
     focusWindow(item.id);
     startDraggingWindow(item.id);
-    dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, winX: win.x, winY: win.y };
+    const locked = Boolean(lockedViewport);
+    dragRef.current = {
+      dragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      winX: locked ? (win.lockedViewportX ?? 0) : win.x,
+      winY: locked ? (win.lockedViewportY ?? 0) : win.y,
+      locked,
+    };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }, [focusWindow, item.id, startDraggingWindow, win.x, win.y]);
+  }, [focusWindow, item.id, startDraggingWindow, lockedViewport, win.x, win.y, win.lockedViewportX, win.lockedViewportY]);
 
   const onTitlePointerMove = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
     if (!dragRef.current.dragging) return;
+    if (dragRef.current.locked) {
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+      moveLockedWindow(item.id, dragRef.current.winX + dx, dragRef.current.winY + dy);
+      return;
+    }
     const dx = (e.clientX - dragRef.current.startX) / movementScale;
     const dy = (e.clientY - dragRef.current.startY) / movementScale;
     moveWindow(item.id, dragRef.current.winX + dx, dragRef.current.winY + dy);
-  }, [item.id, moveWindow, movementScale]);
+  }, [item.id, moveWindow, moveLockedWindow, movementScale]);
 
   const onTitlePointerUp = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
@@ -177,12 +194,31 @@ export default function Window({
     zIndex: getWindowZIndex(win, { isDragging }),
   };
 
-  return (
+  // Viewport-locked style: fixed-position overlay, coords relative to the
+  // canvas root's top-left (so the window stays aligned with the working area
+  // even if the UI grows a toolbar on the side).
+  let lockedStyle: React.CSSProperties | null = null;
+  if (!isMobile && lockedViewport) {
+    const canvasRoot = typeof document !== 'undefined'
+      ? document.querySelector<HTMLElement>('[data-canvas-root="true"]')
+      : null;
+    const rect = canvasRoot?.getBoundingClientRect();
+    lockedStyle = {
+      position: 'fixed',
+      left: (rect?.left ?? 0) + (win.lockedViewportX ?? 0),
+      top: (rect?.top ?? 0) + (win.lockedViewportY ?? 0),
+      width: win.lockedViewportW ?? Math.max(MIN_W, win.w),
+      height: win.lockedViewportH ?? Math.max(MIN_H, win.h),
+      zIndex: getWindowZIndex(win, { isDragging }),
+    };
+  }
+
+  const windowNode = (
     <div
-      className={`absolute flex flex-col bg-canvas-surface border rounded-lg shadow-2xl overflow-hidden ${
+      className={`${lockedStyle ? '' : 'absolute'} flex flex-col bg-canvas-surface border rounded-lg shadow-2xl overflow-hidden ${
         isActive ? 'border-canvas-accent/40' : 'border-canvas-border'
       }`}
-      style={isMobile ? mobileStyle : desktopStyle}
+      style={lockedStyle ?? (isMobile ? mobileStyle : desktopStyle)}
       data-canvas-interactive="true"
       onPointerDown={(e) => { e.stopPropagation(); handleFocus(); }}
       onPointerMove={(e) => e.stopPropagation()}
@@ -329,4 +365,11 @@ export default function Window({
       )}
     </div>
   );
+
+  // Locked windows render via portal to document.body so they escape the
+  // canvas' pan/zoom transform and sit as a viewport-fixed overlay.
+  if (lockedStyle && typeof document !== 'undefined') {
+    return createPortal(windowNode, document.body);
+  }
+  return windowNode;
 }

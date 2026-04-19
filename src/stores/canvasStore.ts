@@ -549,6 +549,7 @@ interface CanvasState {
   minimizeAllWindows: (scope?: LayoutScope) => void;
   closeAllWindows: (scope?: LayoutScope) => void;
   toggleWindowLocked: (id: string) => void;
+  moveLockedWindow: (id: string, viewportX: number, viewportY: number) => void;
 }
 
 let nextId = Date.now();
@@ -1328,10 +1329,56 @@ export const useCanvasStore = create<CanvasState>()(
     },
 
     toggleWindowLocked: (id) => {
+      const state = get();
+      const current = state.items.find((i) => i.id === id);
+      if (!current?.window) return;
+
+      const nowLocked = !current.window.locked;
+      let nextWindow = { ...current.window, locked: nowLocked };
+
+      if (nowLocked) {
+        // Snapshot current on-screen position and size.
+        const screenX = (WORLD_ORIGIN + current.window.x) * state.zoom - state.panX;
+        const screenY = (WORLD_ORIGIN + current.window.y) * state.zoom - state.panY;
+        nextWindow.lockedViewportX = Math.max(0, Math.round(screenX));
+        nextWindow.lockedViewportY = Math.max(0, Math.round(screenY));
+        nextWindow.lockedViewportW = Math.max(1, Math.round(current.window.w * state.zoom));
+        nextWindow.lockedViewportH = Math.max(1, Math.round(current.window.h * state.zoom));
+      } else {
+        // Unlock — drop viewport snapshot; world x/y/w/h stay as-is.
+        delete nextWindow.lockedViewportX;
+        delete nextWindow.lockedViewportY;
+        delete nextWindow.lockedViewportW;
+        delete nextWindow.lockedViewportH;
+      }
+
       set((s) => ({
         items: s.items.map((i) =>
-          i.id === id && i.window
-            ? { ...i, window: { ...i.window, locked: !i.window.locked } }
+          i.id === id ? { ...i, window: nextWindow } : i,
+        ),
+      }));
+      const updated = get().items.find((i) => i.id === id);
+      if (updated) {
+        saveItemLayout(id, updated.x, updated.y, updated.window, get().boardAgentId, {
+          pinned: updated.pinned,
+          pinnedViewportX: updated.pinnedViewportX,
+          pinnedViewportY: updated.pinnedViewportY,
+        });
+      }
+    },
+
+    moveLockedWindow: (id, viewportX, viewportY) => {
+      set((s) => ({
+        items: s.items.map((i) =>
+          i.id === id && i.window?.locked
+            ? {
+                ...i,
+                window: {
+                  ...i.window,
+                  lockedViewportX: Math.max(0, Math.round(viewportX)),
+                  lockedViewportY: Math.max(0, Math.round(viewportY)),
+                },
+              }
             : i,
         ),
       }));

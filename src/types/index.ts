@@ -4,6 +4,16 @@ export interface WindowState {
   isOpen: boolean;
   isMinimized: boolean;
   locked?: boolean;
+  /**
+   * When `locked` is true, these hold the viewport (screen-pixel) offset
+   * relative to the canvas root, plus the on-screen width/height snapshotted
+   * at lock time. The window is rendered viewport-fixed (ignores pan/zoom).
+   * When unlocked, these are cleared and x/y/w/h (world coords) take over.
+   */
+  lockedViewportX?: number;
+  lockedViewportY?: number;
+  lockedViewportW?: number;
+  lockedViewportH?: number;
   x: number;
   y: number;
   w: number;
