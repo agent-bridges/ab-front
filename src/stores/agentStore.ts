@@ -30,7 +30,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   loadAgents: async (preferredAgentId) => {
     set({ loading: true });
     try {
-      const agents = await fetchAgents();
+      const raw = await fetchAgents();
+      // Sort alphabetically by name, case-insensitive, locale-aware
+      // (handles mixed Latin/Cyrillic names correctly).
+      const agents = [...raw].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
       const state = get();
       const preferredExists =
         preferredAgentId && agents.some((agent) => agent.id === preferredAgentId)
