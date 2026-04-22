@@ -56,10 +56,26 @@ export function getCanvasItemTitle(item: CanvasItem, options?: { fullPath?: bool
     }
 
     if (item.type === 'terminal') {
-      const pathBase = item.currentPath
-        ? (options?.fullPath ? item.currentPath : getPathLeaf(item.currentPath))
-        : auto.base;
-      return `${pathBase}${suffix}`;
+      // If the user explicitly set a session label (e.g. "s1" via
+      // `ab sessions meta --label s1`), syncTerminals stored it as auto.base
+      // via getTerminalAutoBase which checks session.label first. In that
+      // case use auto.base as-is. Otherwise derive from the current cwd so
+      // the title follows `cd`.
+      //
+      // We can't reliably tell from auto.base alone whether it was a user
+      // label or a path leaf, so the rule is: if item.currentPath exists AND
+      // its leaf matches auto.base, prefer the path (keeps it live). If they
+      // differ, auto.base was an explicit label — use it.
+      if (item.currentPath) {
+        const leaf = options?.fullPath ? item.currentPath : getPathLeaf(item.currentPath);
+        if (auto.base === getPathLeaf(item.currentPath)) {
+          // auto-derived from cwd → keep live behaviour
+          return `${leaf}${suffix}`;
+        }
+        // user-set label differs from cwd leaf → respect user label, no suffix
+        return auto.base;
+      }
+      return `${auto.base}${suffix}`;
     }
 
     return `${auto.base}${suffix}`;
