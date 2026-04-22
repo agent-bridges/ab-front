@@ -472,10 +472,12 @@ function normalizeLegacyAutoLabel(item: CanvasItem): CanvasItem {
 }
 
 function getTerminalAutoBase(session: PtySession): string {
+  // An explicit user label (set via `ab sessions meta --label …` or the UI
+  // rename flow) always wins — the user picked this name on purpose.
+  if (session.label) return session.label;
   const cwd = session.last_cwd || session.project_path || '';
   if (cwd) return getPathLeafForTitle(cwd);
   if (session.project_name) return session.project_name;
-  if (session.label) return session.label;
   if (session.name) return session.name;
   return 'Terminal';
 }
