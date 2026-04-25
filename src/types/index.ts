@@ -1,5 +1,39 @@
 export type CanvasItemType = 'terminal' | 'filebrowser' | 'notes' | 'anchor';
 
+/**
+ * Desktop render mode. Mobile always renders the icon-grid + tab manager;
+ * this only affects the desktop path:
+ *   - 'canvas' (default): existing pan/zoom canvas with floating windows.
+ *   - 'ide':     VSCode-style sidebar list + tabbed main pane.
+ */
+export type ViewMode = 'canvas' | 'ide';
+
+/** Sort modes for the IDE-view sidebar. */
+export type IdeSortMode = 'type' | 'name' | 'recent' | 'status';
+
+/**
+ * Layout for a multi-tab group in IDE-view's main pane.
+ *  - single: just the focused tab fills the pane (default).
+ *  - v2 / h2: two-up vertical/horizontal split (left|right or top/bottom).
+ *  - v3 / h3: three-up split.
+ *  - grid: 2x2 (extras after 4 stack into the last cell).
+ */
+export type IdeGroupLayout = 'single' | 'v2' | 'h2' | 'v3' | 'h3' | 'grid';
+
+/**
+ * A group is a tabbed/tiled container of canvas items, used in IDE view only.
+ * Membership is by reference — items still exist top-level. Removing from
+ * group does not kill the session.
+ */
+export interface IdeGroup {
+  /** Always prefixed `group:` so it can share id-space with item ids. */
+  id: string;
+  name: string;
+  members: string[];      // canvas item ids
+  layout: IdeGroupLayout;
+  sizes: number[];        // fractional sizes for the dividers
+}
+
 export interface WindowState {
   isOpen: boolean;
   isMinimized: boolean;

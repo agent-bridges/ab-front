@@ -231,3 +231,69 @@ export async function deleteCanvasLayoutSnapshot(name: string, agentId?: string 
   });
   if (!res.ok) await throwFromResponse(res, 'Failed to delete canvas layout');
 }
+
+// === IDE-view persistence (per-agent in localStorage) ===
+//
+// View mode, sort, sidebar width, and open tab list are device-local UX state.
+
+import type { IdeSortMode, ViewMode, IdeGroup } from '../types';
+
+interface IdePrefs {
+  mode: ViewMode;
+  sort: IdeSortMode;
+  sidebarWidth: number;
+  /** Open tabs in the main pane. Entries can be canvas item ids OR group ids ("group:xxx"). */
+  openTabIds: string[];
+  /** Focused tab id (item or group). */
+  focusedItemId: string | null;
+  /** All groups defined for this agent. */
+  groups: IdeGroup[];
+}
+
+const IDE_PREFS_DEFAULT: IdePrefs = {
+  mode: 'canvas',
+  sort: 'type',
+  sidebarWidth: 240,
+  openTabIds: [],
+  focusedItemId: null,
+  groups: [],
+};
+
+function getIdePrefsKey(agentId?: string | null) {
+  return `canvas-ide-prefs:${agentId || 'global'}`;
+}
+
+export function loadIdePrefs(agentId?: string | null): IdePrefs {
+  try {
+    const raw = localStorage.getItem(getIdePrefsKey(agentId));
+    if (!raw) return { ...IDE_PREFS_DEFAULT };
+    const parsed = JSON.parse(raw);
+    const groups: IdeGroup[] = Array.isArray(parsed.groups)
+      ? parsed.groups.filter((g: unknown): g is IdeGroup => {
+          if (!g || typeof g !== 'object') return false;
+          const gg = g as Partial<IdeGroup>;
+          return typeof gg.id === 'string'
+            && typeof gg.name === 'string'
+            && Array.isArray(gg.members)
+            && typeof gg.layout === 'string';
+        })
+      : [];
+    return {
+      mode: parsed.mode === 'ide' ? 'ide' : 'canvas',
+      sort: ['type', 'name', 'recent', 'status'].includes(parsed.sort) ? parsed.sort : 'type',
+      sidebarWidth: typeof parsed.sidebarWidth === 'number' ? parsed.sidebarWidth : 240,
+      openTabIds: Array.isArray(parsed.openTabIds) ? parsed.openTabIds.filter((s: unknown) => typeof s === 'string') : [],
+      focusedItemId: typeof parsed.focusedItemId === 'string' ? parsed.focusedItemId : null,
+      groups,
+    };
+  } catch {
+    return { ...IDE_PREFS_DEFAULT };
+  }
+}
+
+export function saveIdePrefs(agentId: string | null | undefined, patch: Partial<IdePrefs>) {
+  if (!agentId) return;
+  const current = loadIdePrefs(agentId);
+  const next = { ...current, ...patch };
+  localStorage.setItem(getIdePrefsKey(agentId), JSON.stringify(next));
+}

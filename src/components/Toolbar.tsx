@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ZoomIn, ZoomOut, Maximize, Terminal,
   Columns3, Rows3, LayoutGrid, Menu, X, AppWindow, XSquare, LogOut, Minus, Map, MapPin,
-  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User,
+  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User, Columns2,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useCanvasStore } from '../stores/canvasStore';
@@ -72,6 +72,7 @@ export default function Toolbar() {
     anchorsPanelVisible, setAnchorsPanelVisible,
     layoutScope, cycleLayoutScope,
     saveLayoutSnapshotToServer, loadLayoutSnapshotFromServer,
+    viewMode, setViewMode,
   } = useCanvasStore();
   const isMobile = useIsMobile();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -560,60 +561,80 @@ export default function Toolbar() {
       <div className="flex-1 min-w-0" />
 
       <div className="flex items-center gap-0.5 shrink-0">
+        {/* View-mode toggle is always visible */}
         <button
-          onClick={() => cycleLayoutScope()}
-          className="rounded border border-canvas-border px-2 py-1 text-[10px] text-canvas-text hover:bg-canvas-border shrink-0"
-          title="Cycle layout scope"
+          onClick={() => setViewMode(viewMode === 'ide' ? 'canvas' : 'ide')}
+          className={`p-1 rounded shrink-0 ${viewMode === 'ide' ? 'bg-canvas-accent/20' : 'hover:bg-canvas-border'}`}
+          title={viewMode === 'ide' ? 'Switch to canvas view' : 'Switch to IDE view (sidebar + tabs)'}
         >
-          {LAYOUT_SCOPE_LABEL[layoutScope]}
+          {viewMode === 'ide'
+            ? <LayoutGrid size={14} className="text-canvas-accent" />
+            : <Columns2 size={14} className="text-canvas-accent" />}
         </button>
-        <button onClick={() => tileWindows('columns', layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Tile columns">
-          <Columns3 size={14} className="text-canvas-accent" />
-        </button>
-        <button onClick={() => tileWindows('rows', layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Tile rows">
-          <Rows3 size={14} className="text-canvas-accent" />
-        </button>
-        <button onClick={() => tileWindows('grid', layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Tile grid">
-          <LayoutGrid size={14} className="text-canvas-accent" />
-        </button>
-        <button onClick={() => fitAllWindows(layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Show all windows">
-          <AppWindow size={14} className="text-canvas-accent" />
-        </button>
-        <button onClick={() => setMinimapVisible(!minimapVisible)} className="p-1 hover:bg-canvas-border rounded shrink-0" title={minimapVisible ? 'Hide map' : 'Show map'}>
-          <Map size={14} className={minimapVisible ? 'text-canvas-accent' : 'text-canvas-muted'} />
-        </button>
-        <button onClick={() => setAnchorsPanelVisible(!anchorsPanelVisible)} className="p-1 hover:bg-canvas-border rounded shrink-0" title={anchorsPanelVisible ? 'Hide anchors' : 'Show anchors'}>
-          <MapPin size={14} className={anchorsPanelVisible ? 'text-canvas-accent' : 'text-canvas-muted'} />
-        </button>
-        <button onClick={() => minimizeAllWindows(layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Minimize all windows">
-          <Minus size={14} className="text-canvas-accent" />
-        </button>
-        <button onClick={() => closeAllWindows(layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Close all windows">
-          <XSquare size={14} className="text-canvas-accent" />
-        </button>
+
+        {/* Canvas-only tools — hidden in IDE mode */}
+        {viewMode === 'canvas' && (
+          <>
+            <button
+              onClick={() => cycleLayoutScope()}
+              className="rounded border border-canvas-border px-2 py-1 text-[10px] text-canvas-text hover:bg-canvas-border shrink-0"
+              title="Cycle layout scope"
+            >
+              {LAYOUT_SCOPE_LABEL[layoutScope]}
+            </button>
+            <button onClick={() => tileWindows('columns', layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Tile columns">
+              <Columns3 size={14} className="text-canvas-accent" />
+            </button>
+            <button onClick={() => tileWindows('rows', layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Tile rows">
+              <Rows3 size={14} className="text-canvas-accent" />
+            </button>
+            <button onClick={() => tileWindows('grid', layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Tile grid">
+              <LayoutGrid size={14} className="text-canvas-accent" />
+            </button>
+            <button onClick={() => fitAllWindows(layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Show all windows">
+              <AppWindow size={14} className="text-canvas-accent" />
+            </button>
+            <button onClick={() => setMinimapVisible(!minimapVisible)} className="p-1 hover:bg-canvas-border rounded shrink-0" title={minimapVisible ? 'Hide map' : 'Show map'}>
+              <Map size={14} className={minimapVisible ? 'text-canvas-accent' : 'text-canvas-muted'} />
+            </button>
+            <button onClick={() => setAnchorsPanelVisible(!anchorsPanelVisible)} className="p-1 hover:bg-canvas-border rounded shrink-0" title={anchorsPanelVisible ? 'Hide anchors' : 'Show anchors'}>
+              <MapPin size={14} className={anchorsPanelVisible ? 'text-canvas-accent' : 'text-canvas-muted'} />
+            </button>
+            <button onClick={() => minimizeAllWindows(layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Minimize all windows">
+              <Minus size={14} className="text-canvas-accent" />
+            </button>
+            <button onClick={() => closeAllWindows(layoutScope)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Close all windows">
+              <XSquare size={14} className="text-canvas-accent" />
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="h-4 w-px bg-canvas-border mx-1 shrink-0" />
-
-      <div className="flex items-center gap-0.5 shrink-0">
-        <button onClick={() => applyViewportZoom(zoom - 0.1)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Zoom out">
-          <ZoomOut size={14} className="text-canvas-accent" />
-        </button>
-        <button
-          onClick={() => applyViewportZoom(1)}
-          className="text-[10px] text-canvas-muted w-8 text-center shrink-0 hover:text-canvas-accent"
-          title="Reset zoom to 100%"
-          data-zoom-display
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <button onClick={() => applyViewportZoom(zoom + 0.1)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Zoom in">
-          <ZoomIn size={14} className="text-canvas-accent" />
-        </button>
-        <button onClick={handleFitIcons} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Fit icons">
-          <Maximize size={14} className="text-canvas-accent" />
-        </button>
-      </div>
+      {/* Zoom controls — canvas only (no zoom concept in IDE) */}
+      {viewMode === 'canvas' && (
+        <>
+          <div className="h-4 w-px bg-canvas-border mx-1 shrink-0" />
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button onClick={() => applyViewportZoom(zoom - 0.1)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Zoom out">
+              <ZoomOut size={14} className="text-canvas-accent" />
+            </button>
+            <button
+              onClick={() => applyViewportZoom(1)}
+              className="text-[10px] text-canvas-muted w-8 text-center shrink-0 hover:text-canvas-accent"
+              title="Reset zoom to 100%"
+              data-zoom-display
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button onClick={() => applyViewportZoom(zoom + 0.1)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Zoom in">
+              <ZoomIn size={14} className="text-canvas-accent" />
+            </button>
+            <button onClick={handleFitIcons} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Fit icons">
+              <Maximize size={14} className="text-canvas-accent" />
+            </button>
+          </div>
+        </>
+      )}
 
       <div className="h-4 w-px bg-canvas-border mx-1 shrink-0" />
       <button onClick={() => setSettingsOpen(true)} className="p-1 hover:bg-canvas-border rounded shrink-0" title="Settings">

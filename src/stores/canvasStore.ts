@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CanvasItem, CanvasItemType, WindowState, PtySession } from '../types';
+import type { CanvasItem, CanvasItemType, WindowState, PtySession, ViewMode, IdeSortMode, IdeGroupLayout, IdeGroup } from '../types';
 import {
   fetchCanvasItems,
   upsertCanvasItem,
@@ -10,6 +10,8 @@ import {
   saveViewport,
   saveCanvasLayoutSnapshot,
   getCanvasLayoutSnapshot,
+  loadIdePrefs,
+  saveIdePrefs,
   type CanvasLayoutSnapshot,
 } from '../api/canvas';
 import { killPty, updatePtyMeta } from '../api/pty';
@@ -552,6 +554,31 @@ interface CanvasState {
   closeAllWindows: (scope?: LayoutScope) => void;
   toggleWindowLocked: (id: string) => void;
   moveLockedWindow: (id: string, viewportX: number, viewportY: number) => void;
+
+  // --- IDE-view state ---
+  viewMode: ViewMode;
+  ideSort: IdeSortMode;
+  ideSidebarWidth: number;
+  /** Open tab ids — can be canvas item ids OR group ids (prefixed `group:`). */
+  ideOpenTabIds: string[];
+  /** Focused tab id — item or group. */
+  ideFocusedItemId: string | null;
+  /** All defined groups for the current agent. */
+  ideGroups: IdeGroup[];
+  setViewMode: (mode: ViewMode) => void;
+  setIdeSort: (sort: IdeSortMode) => void;
+  setIdeSidebarWidth: (width: number) => void;
+  openIdeTab: (id: string) => void;
+  closeIdeTab: (id: string) => void;
+  setIdeFocusedItem: (id: string | null) => void;
+  /** Group operations — all IDE-scoped, never touch canvas item state. */
+  createIdeGroup: (initialMembers?: string[]) => string; // returns the new group id
+  deleteIdeGroup: (groupId: string) => void;
+  renameIdeGroup: (groupId: string, name: string) => void;
+  addMemberToGroup: (groupId: string, itemId: string) => void;
+  removeMemberFromGroup: (groupId: string, itemId: string) => void;
+  setGroupLayout: (groupId: string, layout: IdeGroupLayout) => void;
+  setGroupSizes: (groupId: string, sizes: number[]) => void;
 }
 
 let nextId = Date.now();
@@ -651,6 +678,13 @@ export const useCanvasStore = create<CanvasState>()(
     rulerBottom: initialWorkspaceUi.rulerBottom,
     loaded: false,
 
+    viewMode: 'canvas',
+    ideSort: 'type',
+    ideSidebarWidth: 240,
+    ideOpenTabIds: [],
+    ideFocusedItemId: null,
+    ideGroups: [],
+
     loadItems: async (agentId) => {
       const resetState = {
         selectedItemIds: [] as string[],
@@ -681,6 +715,7 @@ export const useCanvasStore = create<CanvasState>()(
       const minimapPrefs = loadMinimapPrefs(agentId);
       const anchorsPanelPrefs = loadAnchorsPanelPrefs(agentId);
       const workspaceUiPrefs = loadWorkspaceUiPrefs(agentId);
+      const idePrefs = loadIdePrefs(agentId);
 
       const uiState = {
         panX: viewport?.panX ?? 0, panY: viewport?.panY ?? 0, zoom: viewport?.zoom ?? 1,
@@ -691,6 +726,12 @@ export const useCanvasStore = create<CanvasState>()(
         layoutScope: workspaceUiPrefs.layoutScope,
         rulerLeft: workspaceUiPrefs.rulerLeft, rulerRight: workspaceUiPrefs.rulerRight,
         rulerTop: workspaceUiPrefs.rulerTop, rulerBottom: workspaceUiPrefs.rulerBottom,
+        viewMode: idePrefs.mode,
+        ideSort: idePrefs.sort,
+        ideSidebarWidth: idePrefs.sidebarWidth,
+        ideOpenTabIds: idePrefs.openTabIds,
+        ideFocusedItemId: idePrefs.focusedItemId,
+        ideGroups: idePrefs.groups,
       };
 
       // Step 1: show from cache instantly
@@ -1392,6 +1433,123 @@ export const useCanvasStore = create<CanvasState>()(
           pinnedViewportY: item.pinnedViewportY,
         });
       }
+    },
+
+    setViewMode: (mode) => {
+      set({ viewMode: mode });
+      saveIdePrefs(get().boardAgentId, { mode });
+    },
+    setIdeSort: (sort) => {
+      set({ ideSort: sort });
+      saveIdePrefs(get().boardAgentId, { sort });
+    },
+    setIdeSidebarWidth: (width) => {
+      const w = Math.max(160, Math.min(640, Math.round(width)));
+      set({ ideSidebarWidth: w });
+      saveIdePrefs(get().boardAgentId, { sidebarWidth: w });
+    },
+    openIdeTab: (id) => {
+      const state = get();
+      const tabs = state.ideOpenTabIds.includes(id)
+        ? state.ideOpenTabIds
+        : [...state.ideOpenTabIds, id];
+      set({ ideOpenTabIds: tabs, ideFocusedItemId: id });
+      saveIdePrefs(state.boardAgentId, { openTabIds: tabs, focusedItemId: id });
+    },
+    closeIdeTab: (id) => {
+      const state = get();
+      const tabs = state.ideOpenTabIds.filter((t) => t !== id);
+      let focused = state.ideFocusedItemId;
+      if (focused === id) {
+        focused = tabs[tabs.length - 1] ?? null;
+      }
+      set({ ideOpenTabIds: tabs, ideFocusedItemId: focused });
+      saveIdePrefs(state.boardAgentId, { openTabIds: tabs, focusedItemId: focused });
+    },
+    setIdeFocusedItem: (id) => {
+      set({ ideFocusedItemId: id });
+      saveIdePrefs(get().boardAgentId, { focusedItemId: id });
+    },
+    createIdeGroup: (initialMembers = []) => {
+      const id = `group:${Date.now().toString(36)}-${Math.floor(Math.random() * 100000).toString(36)}`;
+      const state = get();
+      const defaultName = `Group ${state.ideGroups.length + 1}`;
+      const memberCount = initialMembers.length;
+      const layout: IdeGroupLayout = memberCount === 2 ? 'v2'
+        : memberCount === 3 ? 'v3'
+        : memberCount >= 4 ? 'grid'
+        : 'single';
+      const sizes = memberCount > 1 ? new Array(memberCount).fill(1 / memberCount) : [];
+      const newGroup: IdeGroup = { id, name: defaultName, members: [...initialMembers], layout, sizes };
+      const groups = [...state.ideGroups, newGroup];
+      // Auto-open the new group as a tab and focus it.
+      const openTabIds = state.ideOpenTabIds.includes(id) ? state.ideOpenTabIds : [...state.ideOpenTabIds, id];
+      set({ ideGroups: groups, ideOpenTabIds: openTabIds, ideFocusedItemId: id });
+      saveIdePrefs(state.boardAgentId, { groups, openTabIds, focusedItemId: id });
+      return id;
+    },
+    deleteIdeGroup: (groupId) => {
+      const state = get();
+      const groups = state.ideGroups.filter((g) => g.id !== groupId);
+      const openTabIds = state.ideOpenTabIds.filter((t) => t !== groupId);
+      let focused = state.ideFocusedItemId;
+      if (focused === groupId) focused = openTabIds[openTabIds.length - 1] ?? null;
+      set({ ideGroups: groups, ideOpenTabIds: openTabIds, ideFocusedItemId: focused });
+      saveIdePrefs(state.boardAgentId, { groups, openTabIds, focusedItemId: focused });
+    },
+    renameIdeGroup: (groupId, name) => {
+      const state = get();
+      const groups = state.ideGroups.map((g) => g.id === groupId ? { ...g, name } : g);
+      set({ ideGroups: groups });
+      saveIdePrefs(state.boardAgentId, { groups });
+    },
+    addMemberToGroup: (groupId, itemId) => {
+      const state = get();
+      const groups = state.ideGroups.map((g) => {
+        if (g.id !== groupId || g.members.includes(itemId)) return g;
+        const members = [...g.members, itemId];
+        // Refresh layout/sizes to fit new member count.
+        const layout: IdeGroupLayout = members.length === 2 ? 'v2'
+          : members.length === 3 ? 'v3'
+          : members.length >= 4 ? 'grid'
+          : 'single';
+        const sizes = members.length > 1 ? new Array(members.length).fill(1 / members.length) : [];
+        return { ...g, members, layout, sizes };
+      });
+      set({ ideGroups: groups });
+      saveIdePrefs(state.boardAgentId, { groups });
+    },
+    removeMemberFromGroup: (groupId, itemId) => {
+      const state = get();
+      const groups = state.ideGroups.map((g) => {
+        if (g.id !== groupId) return g;
+        const members = g.members.filter((m) => m !== itemId);
+        const layout: IdeGroupLayout = members.length === 2 ? 'v2'
+          : members.length === 3 ? 'v3'
+          : members.length >= 4 ? 'grid'
+          : 'single';
+        const sizes = members.length > 1 ? new Array(members.length).fill(1 / members.length) : [];
+        return { ...g, members, layout, sizes };
+      });
+      set({ ideGroups: groups });
+      saveIdePrefs(state.boardAgentId, { groups });
+    },
+    setGroupLayout: (groupId, layout) => {
+      const state = get();
+      const groups = state.ideGroups.map((g) => {
+        if (g.id !== groupId) return g;
+        const cells = g.members.length || 1;
+        const sizes = layout === 'single' ? [] : new Array(cells).fill(1 / cells);
+        return { ...g, layout, sizes };
+      });
+      set({ ideGroups: groups });
+      saveIdePrefs(state.boardAgentId, { groups });
+    },
+    setGroupSizes: (groupId, sizes) => {
+      const state = get();
+      const groups = state.ideGroups.map((g) => g.id === groupId ? { ...g, sizes } : g);
+      set({ ideGroups: groups });
+      saveIdePrefs(state.boardAgentId, { groups });
     },
 
     tileWindows: (mode, scope = DEFAULT_LAYOUT_SCOPE) => {

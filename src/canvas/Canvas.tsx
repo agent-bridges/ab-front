@@ -9,6 +9,7 @@ import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import AnchorsPanel from './AnchorsPanel';
 import CanvasItemNode from './CanvasItemNode';
 import MobileIconGrid from './MobileIconGrid';
+import IdeLayout from './IdeLayout';
 import ContextMenu from './ContextMenu';
 import Window from './Window';
 import { BOARD_Z } from './zIndexManager';
@@ -114,6 +115,7 @@ export default function Canvas() {
   const setAnchorsPanelSize = useCanvasStore((s) => s.setAnchorsPanelSize);
   const setAnchorsPanelPosition = useCanvasStore((s) => s.setAnchorsPanelPosition);
   const isMobile = useIsMobile();
+  const viewMode = useCanvasStore((s) => s.viewMode);
   const { panX, panY, zoom, canvasRef, onPointerDown, onPointerMove, onPointerUp } = usePanZoom();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -752,20 +754,30 @@ export default function Canvas() {
     e.stopPropagation();
   }, []);
 
+  // Three render modes:
+  //   mobile  → MobileIconGrid (no canvas at all)
+  //   ide     → IdeLayout (sidebar + tabs; no canvas tree, no items, no windows)
+  //   canvas  → existing pan/zoom canvas
+  // For IDE mode the canvas tree is NOT rendered. Pan/zoom/items state lives
+  // in zustand so toggling back restores everything.
+  const ideMode = !isMobile && viewMode === 'ide';
+
   return (
     <div
       ref={setRefs}
-      className={`flex-1 relative bg-canvas-bg ${isMobile ? 'overflow-y-auto' : 'overflow-auto'}`}
+      className={`flex-1 relative bg-canvas-bg ${isMobile ? 'overflow-y-auto' : ideMode ? 'overflow-hidden' : 'overflow-auto'}`}
       data-canvas="bg"
       data-canvas-root="true"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onContextMenu={handleContextMenu}
+      onPointerDown={ideMode ? undefined : onPointerDown}
+      onPointerMove={ideMode ? undefined : onPointerMove}
+      onPointerUp={ideMode ? undefined : onPointerUp}
+      onContextMenu={ideMode ? undefined : handleContextMenu}
       style={{ touchAction: 'none' }}
     >
       {isMobile ? (
         <MobileIconGrid onOpenItem={() => {}} />
+      ) : ideMode ? (
+        <IdeLayout />
       ) : (
         <div
           className="relative"
@@ -790,7 +802,7 @@ export default function Canvas() {
         </div>
       )}
 
-      {!isMobile && pinnedItems.length > 0 && typeof document !== 'undefined' && createPortal(
+      {!isMobile && !ideMode && pinnedItems.length > 0 && typeof document !== 'undefined' && createPortal(
         <>
           {canvasRect && (
             <div
@@ -822,7 +834,7 @@ export default function Canvas() {
         document.body,
       )}
 
-      {!isMobile && layoutScope === 'rulers' && rulerFrame && typeof document !== 'undefined' && createPortal(
+      {!isMobile && !ideMode && layoutScope === 'rulers' && rulerFrame && typeof document !== 'undefined' && createPortal(
         <>
           <div
             className="fixed pointer-events-none border border-dashed border-canvas-accent/80"
@@ -881,7 +893,7 @@ export default function Canvas() {
 
       {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
 
-      {!isMobile && anchorsPanelVisible && typeof document !== 'undefined' && createPortal(
+      {!isMobile && !ideMode && anchorsPanelVisible && typeof document !== 'undefined' && createPortal(
         <AnchorsPanel
           anchors={anchors.map((item) => ({ id: item.id, title: getCanvasItemTitle(item) }))}
           width={anchorsPanelWidth}
@@ -908,7 +920,7 @@ export default function Canvas() {
         document.body,
       )}
 
-      {!isMobile && minimapVisible && typeof document !== 'undefined' && createPortal(
+      {!isMobile && !ideMode && minimapVisible && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed rounded-lg border border-canvas-border bg-canvas-surface/95 shadow-2xl backdrop-blur-sm overflow-hidden"
           data-canvas-interactive="true"
