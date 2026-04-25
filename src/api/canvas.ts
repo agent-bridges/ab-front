@@ -236,7 +236,7 @@ export async function deleteCanvasLayoutSnapshot(name: string, agentId?: string 
 //
 // View mode, sort, sidebar width, and open tab list are device-local UX state.
 
-import type { IdeSortMode, ViewMode, IdeGroup } from '../types';
+import type { IdeSortMode, ViewMode, IdeGroup, IdeGroupSizes } from '../types';
 
 interface IdePrefs {
   mode: ViewMode;
@@ -248,6 +248,27 @@ interface IdePrefs {
   focusedItemId: string | null;
   /** All groups defined for this agent. */
   groups: IdeGroup[];
+}
+
+/**
+ * Normalize a persisted group `sizes` value to the current `IdeGroupSizes` shape.
+ * Accepts the legacy flat `number[]` (wraps as `{ outer }`), or the current
+ * `{ outer, inner? }` shape. Anything else returns an empty placeholder, which
+ * the store will rebuild via buildDefaultSizes on next interaction.
+ */
+function normalizeGroupSizes(raw: unknown): IdeGroupSizes {
+  if (Array.isArray(raw) && raw.every((n) => typeof n === 'number')) {
+    return { outer: raw as number[] };
+  }
+  if (raw && typeof raw === 'object') {
+    const r = raw as { outer?: unknown; inner?: unknown };
+    const outer = Array.isArray(r.outer) && r.outer.every((n) => typeof n === 'number') ? (r.outer as number[]) : [];
+    const inner = Array.isArray(r.inner)
+      ? (r.inner as unknown[]).filter((row): row is number[] => Array.isArray(row) && row.every((n) => typeof n === 'number'))
+      : undefined;
+    return inner ? { outer, inner } : { outer };
+  }
+  return { outer: [] };
 }
 
 const IDE_PREFS_DEFAULT: IdePrefs = {
@@ -269,14 +290,19 @@ export function loadIdePrefs(agentId?: string | null): IdePrefs {
     if (!raw) return { ...IDE_PREFS_DEFAULT };
     const parsed = JSON.parse(raw);
     const groups: IdeGroup[] = Array.isArray(parsed.groups)
-      ? parsed.groups.filter((g: unknown): g is IdeGroup => {
-          if (!g || typeof g !== 'object') return false;
-          const gg = g as Partial<IdeGroup>;
-          return typeof gg.id === 'string'
-            && typeof gg.name === 'string'
-            && Array.isArray(gg.members)
-            && typeof gg.layout === 'string';
-        })
+      ? parsed.groups
+          .filter((g: unknown): g is Omit<IdeGroup, 'sizes'> & { sizes: unknown } => {
+            if (!g || typeof g !== 'object') return false;
+            const gg = g as Partial<IdeGroup>;
+            return typeof gg.id === 'string'
+              && typeof gg.name === 'string'
+              && Array.isArray(gg.members)
+              && typeof gg.layout === 'string';
+          })
+          .map((g: Omit<IdeGroup, 'sizes'> & { sizes: unknown }): IdeGroup => ({
+            ...g,
+            sizes: normalizeGroupSizes(g.sizes),
+          }))
       : [];
     return {
       mode: parsed.mode === 'ide' ? 'ide' : 'canvas',

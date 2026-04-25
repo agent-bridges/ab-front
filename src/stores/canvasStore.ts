@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CanvasItem, CanvasItemType, WindowState, PtySession, ViewMode, IdeSortMode, IdeGroupLayout, IdeGroup } from '../types';
+import type { CanvasItem, CanvasItemType, WindowState, PtySession, ViewMode, IdeSortMode, IdeGroupLayout, IdeGroup, IdeGroupSizes } from '../types';
 import {
   fetchCanvasItems,
   upsertCanvasItem,
@@ -33,6 +33,29 @@ const MINIMAP_MIN_H = 120;
 const ANCHORS_PANEL_MIN_W = 220;
 const ANCHORS_PANEL_MIN_H = 140;
 const DEFAULT_LAYOUT_SCOPE = 'viewport' as const;
+
+const GRID_COLS = 2;
+
+/**
+ * Build default sizes for a group layout. For grid, lays out as N rows of
+ * GRID_COLS cells (last row may be partial). Each row has its own column sizes
+ * so users can resize tiles independently within a row.
+ */
+function buildDefaultSizes(layout: IdeGroupLayout, cellCount: number): IdeGroupSizes {
+  if (cellCount <= 1 || layout === 'single') return { outer: cellCount === 1 ? [1] : [] };
+  if (layout === 'grid') {
+    const rows = Math.ceil(cellCount / GRID_COLS);
+    const outer = new Array(rows).fill(1 / rows);
+    const inner: number[][] = [];
+    for (let r = 0; r < rows; r++) {
+      const cellsInRow = Math.min(GRID_COLS, cellCount - r * GRID_COLS);
+      inner.push(cellsInRow > 1 ? new Array(cellsInRow).fill(1 / cellsInRow) : [1]);
+    }
+    return { outer, inner };
+  }
+  // v2/v3/h2/h3 — flat single track.
+  return { outer: new Array(cellCount).fill(1 / cellCount) };
+}
 const DEFAULT_RULER_LEFT = 96;
 const DEFAULT_RULER_RIGHT = 96;
 const DEFAULT_RULER_TOP = 72;
@@ -578,7 +601,7 @@ interface CanvasState {
   addMemberToGroup: (groupId: string, itemId: string) => void;
   removeMemberFromGroup: (groupId: string, itemId: string) => void;
   setGroupLayout: (groupId: string, layout: IdeGroupLayout) => void;
-  setGroupSizes: (groupId: string, sizes: number[]) => void;
+  setGroupSizes: (groupId: string, sizes: IdeGroupSizes) => void;
 }
 
 let nextId = Date.now();
@@ -1479,7 +1502,7 @@ export const useCanvasStore = create<CanvasState>()(
         : memberCount === 3 ? 'v3'
         : memberCount >= 4 ? 'grid'
         : 'single';
-      const sizes = memberCount > 1 ? new Array(memberCount).fill(1 / memberCount) : [];
+      const sizes = buildDefaultSizes(layout, memberCount);
       const newGroup: IdeGroup = { id, name: defaultName, members: [...initialMembers], layout, sizes };
       const groups = [...state.ideGroups, newGroup];
       // Auto-open the new group as a tab and focus it.
@@ -1513,7 +1536,7 @@ export const useCanvasStore = create<CanvasState>()(
           : members.length === 3 ? 'v3'
           : members.length >= 4 ? 'grid'
           : 'single';
-        const sizes = members.length > 1 ? new Array(members.length).fill(1 / members.length) : [];
+        const sizes = buildDefaultSizes(layout, members.length);
         return { ...g, members, layout, sizes };
       });
       set({ ideGroups: groups });
@@ -1528,7 +1551,7 @@ export const useCanvasStore = create<CanvasState>()(
           : members.length === 3 ? 'v3'
           : members.length >= 4 ? 'grid'
           : 'single';
-        const sizes = members.length > 1 ? new Array(members.length).fill(1 / members.length) : [];
+        const sizes = buildDefaultSizes(layout, members.length);
         return { ...g, members, layout, sizes };
       });
       set({ ideGroups: groups });
@@ -1538,8 +1561,7 @@ export const useCanvasStore = create<CanvasState>()(
       const state = get();
       const groups = state.ideGroups.map((g) => {
         if (g.id !== groupId) return g;
-        const cells = g.members.length || 1;
-        const sizes = layout === 'single' ? [] : new Array(cells).fill(1 / cells);
+        const sizes = buildDefaultSizes(layout, g.members.length);
         return { ...g, layout, sizes };
       });
       set({ ideGroups: groups });

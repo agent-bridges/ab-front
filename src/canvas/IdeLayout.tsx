@@ -25,7 +25,7 @@ import CodexIcon from '../components/icons/CodexIcon';
 import { getTerminalStatusMeta } from '../components/ProcessIndicator';
 import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import ConfirmDialog from '../components/dialogs/ConfirmDialog';
-import type { CanvasItem, CanvasItemType, IdeSortMode, IdeGroupLayout, IdeGroup } from '../types';
+import type { CanvasItem, CanvasItemType, IdeSortMode, IdeGroupLayout, IdeGroup, IdeGroupSizes } from '../types';
 
 const TYPE_LABEL: Record<CanvasItemType, string> = {
   terminal: 'Terminals',
@@ -234,9 +234,36 @@ function Tile({
   );
 }
 
+const GRID_COLS = 2;
+
+/** Resize two adjacent fractions in `arr` so they still sum to the same total. */
+function resizeAdjacent(arr: number[], idx: number, deltaFrac: number): number[] {
+  if (idx < 0 || idx + 1 >= arr.length) return arr;
+  const min = 0.1;
+  const next = [...arr];
+  next[idx] = Math.max(min, Math.min(1 - min, (next[idx] ?? 0) + deltaFrac));
+  next[idx + 1] = Math.max(min, Math.min(1 - min, (next[idx + 1] ?? 0) - deltaFrac));
+  const sum = next.reduce((a, b) => a + b, 0);
+  if (sum > 0) for (let i = 0; i < next.length; i++) next[i] = next[i] / sum;
+  return next;
+}
+
+/** Pad/truncate `arr` to `n` items by spreading 1/n; used for stale persisted sizes. */
+function padFractions(arr: number[] | undefined, n: number): number[] {
+  if (n <= 0) return [];
+  if (!arr || arr.length !== n) return new Array(n).fill(1 / n);
+  return arr;
+}
+
 /**
  * Arranges N tiles per a chosen layout. Pure presentational; size state and
  * actions live in the parent.
+ *
+ * Resizing rules:
+ *  - v2/v3/h2/h3: a single track of cells, one divider between each adjacent pair.
+ *  - grid: rows of GRID_COLS cells. Outer dividers resize whole rows; each row
+ *    has its OWN inner col-dividers that resize tiles inside that row only —
+ *    the user can drag the divider between cells [0,1] without touching [2,3].
  */
 function TileGroup({
   items,
@@ -250,14 +277,16 @@ function TileGroup({
 }: {
   items: CanvasItem[];
   layout: IdeGroupLayout;
-  sizes: number[];
+  sizes: IdeGroupSizes;
   activeId: string | null;
   onActivate: (id: string) => void;
   onHide: (id: string) => void;
   onKill: (item: CanvasItem) => void;
-  onResize: (sizes: number[]) => void;
+  onResize: (sizes: IdeGroupSizes) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
+  // For grid: one ref per row so inner-divider drag uses that row's clientWidth.
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   const renderTile = (it: CanvasItem) => (
     <Tile
@@ -270,21 +299,29 @@ function TileGroup({
     />
   );
 
-  // Helper: drag a divider at index `idx` (between cells idx and idx+1).
-  const dragDivider = useCallback((idx: number, deltaPx: number, axis: 'col' | 'row') => {
-    const el = containerRef.current;
+  // Drag the outer divider at idx (between tracks idx and idx+1).
+  // expectedLen = number of outer tracks the render path is using right now,
+  // so a stale persisted `sizes.outer` is silently re-padded to match.
+  const dragOuter = useCallback((idx: number, deltaPx: number, axis: 'col' | 'row', expectedLen: number) => {
+    const el = outerRef.current;
     if (!el) return;
     const total = axis === 'col' ? el.clientWidth : el.clientHeight;
     if (total <= 0) return;
     const deltaFrac = deltaPx / total;
-    const next = [...sizes];
-    const min = 0.1;
-    next[idx] = Math.max(min, Math.min(1 - min, (next[idx] ?? 0) + deltaFrac));
-    next[idx + 1] = Math.max(min, Math.min(1 - min, (next[idx + 1] ?? 0) - deltaFrac));
-    // Normalize so they sum to 1 (defensive against compounding rounding).
-    const sum = next.reduce((a, b) => a + b, 0);
-    if (sum > 0) for (let i = 0; i < next.length; i++) next[i] = next[i] / sum;
-    onResize(next);
+    const outer = padFractions(sizes.outer, expectedLen);
+    onResize({ ...sizes, outer: resizeAdjacent(outer, idx, deltaFrac) });
+  }, [sizes, onResize]);
+
+  // Drag the inner divider at colIdx inside row rowIdx (grid only).
+  const dragInner = useCallback((rowIdx: number, colIdx: number, deltaPx: number, expectedLen: number) => {
+    const el = rowRefs.current[rowIdx];
+    if (!el) return;
+    const total = el.clientWidth;
+    if (total <= 0) return;
+    const deltaFrac = deltaPx / total;
+    const inner = sizes.inner ? sizes.inner.map((r) => [...r]) : [];
+    inner[rowIdx] = resizeAdjacent(padFractions(inner[rowIdx], expectedLen), colIdx, deltaFrac);
+    onResize({ ...sizes, inner });
   }, [sizes, onResize]);
 
   if (items.length === 0) return null;
@@ -292,47 +329,58 @@ function TileGroup({
     return <div className="flex-1 min-h-0 flex">{renderTile(items[0])}</div>;
   }
 
-  // Side-by-side (vertical split = columns) for v2/v3.
-  if (layout === 'v2' || layout === 'v3') {
+  // Single-track: v2/v3 (columns) and h2/h3 (rows).
+  if (layout === 'v2' || layout === 'v3' || layout === 'h2' || layout === 'h3') {
+    const isCol = layout === 'v2' || layout === 'v3';
+    const outer = padFractions(sizes.outer, items.length);
     return (
-      <div ref={containerRef} className="flex-1 min-h-0 flex">
+      <div ref={outerRef} className={`flex-1 min-h-0 flex ${isCol ? '' : 'flex-col'}`}>
         {items.map((it, i) => (
           <Fragment key={`cell-${it.id}`}>
-            <div className="flex flex-col min-w-0 min-h-0" style={{ flex: `${sizes[i] ?? 1 / items.length} 1 0` }}>
+            <div className="flex flex-col min-w-0 min-h-0" style={{ flex: `${outer[i]} 1 0` }}>
               {renderTile(it)}
             </div>
-            {i < items.length - 1 && <Divider direction="col" onDrag={(d) => dragDivider(i, d, 'col')} />}
+            {i < items.length - 1 && (
+              <Divider direction={isCol ? 'col' : 'row'} onDrag={(d) => dragOuter(i, d, isCol ? 'col' : 'row', items.length)} />
+            )}
           </Fragment>
         ))}
       </div>
     );
   }
 
-  // Stacked (horizontal split = rows) for h2/h3.
-  if (layout === 'h2' || layout === 'h3') {
-    return (
-      <div ref={containerRef} className="flex-1 min-h-0 flex flex-col">
-        {items.map((it, i) => (
-          <Fragment key={`cell-${it.id}`}>
-            <div className="flex flex-col min-w-0 min-h-0" style={{ flex: `${sizes[i] ?? 1 / items.length} 1 0` }}>
-              {renderTile(it)}
-            </div>
-            {i < items.length - 1 && <Divider direction="row" onDrag={(d) => dragDivider(i, d, 'row')} />}
-          </Fragment>
-        ))}
-      </div>
-    );
+  // Grid: rows-of-columns. Outer = row heights; inner[r] = col widths in row r.
+  const rowsCount = Math.ceil(items.length / GRID_COLS);
+  const rows: CanvasItem[][] = [];
+  for (let r = 0; r < rowsCount; r++) {
+    rows.push(items.slice(r * GRID_COLS, r * GRID_COLS + GRID_COLS));
   }
-
-  // Grid (2×2; extras stack into the last row).
-  // For simplicity v1 uses CSS grid with auto-rows. No drag-resize on grid;
-  // user can switch to v2/h2/etc. for that.
+  const outer = padFractions(sizes.outer, rowsCount);
+  const innerSafe: number[][] = rows.map((row, r) => padFractions(sizes.inner?.[r], row.length));
   return (
-    <div ref={containerRef} className="flex-1 min-h-0 grid gap-1" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gridAutoRows: 'minmax(0, 1fr)' }}>
-      {items.map((it) => (
-        <div key={`cell-${it.id}`} className="flex flex-col min-w-0 min-h-0">
-          {renderTile(it)}
-        </div>
+    <div ref={outerRef} className="flex-1 min-h-0 flex flex-col">
+      {rows.map((rowItems, rowIdx) => (
+        <Fragment key={`row-${rowIdx}`}>
+          <div
+            ref={(el) => { rowRefs.current[rowIdx] = el; }}
+            className="flex min-w-0 min-h-0"
+            style={{ flex: `${outer[rowIdx]} 1 0` }}
+          >
+            {rowItems.map((it, colIdx) => (
+              <Fragment key={`cell-${it.id}`}>
+                <div className="flex flex-col min-w-0 min-h-0" style={{ flex: `${innerSafe[rowIdx][colIdx]} 1 0` }}>
+                  {renderTile(it)}
+                </div>
+                {colIdx < rowItems.length - 1 && (
+                  <Divider direction="col" onDrag={(d) => dragInner(rowIdx, colIdx, d, rowItems.length)} />
+                )}
+              </Fragment>
+            ))}
+          </div>
+          {rowIdx < rows.length - 1 && (
+            <Divider direction="row" onDrag={(d) => dragOuter(rowIdx, d, 'row', rowsCount)} />
+          )}
+        </Fragment>
       ))}
     </div>
   );
@@ -364,7 +412,7 @@ function GroupView({
   onRename: (name: string) => void;
   onDelete: () => void;
   onSetLayout: (layout: IdeGroupLayout) => void;
-  onSetSizes: (sizes: number[]) => void;
+  onSetSizes: (sizes: IdeGroupSizes) => void;
   onAddMember: (itemId: string) => void;
   onRemoveMember: (itemId: string) => void;
   onKillMember: (item: CanvasItem) => void;
@@ -401,11 +449,7 @@ function GroupView({
   const btn = (active: boolean) =>
     `p-1 rounded shrink-0 ${active ? 'bg-canvas-accent/20 text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border hover:text-canvas-text'}`;
 
-  // Pad sizes to length if user added/removed members between persisted snapshots.
-  const sizes = group.sizes.length === cells && cells > 0
-    ? group.sizes
-    : (cells > 0 ? new Array(cells).fill(1 / cells) : []);
-
+  // TileGroup pads/normalizes sizes internally; just pass through.
   const [activeMemberId, setActiveMemberId] = useState<string | null>(members[0]?.id ?? null);
   useEffect(() => {
     // Keep activeMemberId valid as members come and go.
@@ -511,7 +555,7 @@ function GroupView({
         <TileGroup
           items={members}
           layout={group.layout}
-          sizes={sizes}
+          sizes={group.sizes}
           activeId={activeMemberId}
           onActivate={(id) => setActiveMemberId(id)}
           onHide={(id) => onRemoveMember(id)}
