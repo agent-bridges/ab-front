@@ -82,6 +82,115 @@ function groupByType(items: CanvasItem[], sort: IdeSortMode): Array<{ type: Canv
   return [{ type: 'terminal', items: sorted }];
 }
 
+/**
+ * Tiny inline rename input. Commits on Enter/blur, cancels on Escape.
+ * Empty/whitespace-only input is treated as cancel so labels can't go blank.
+ */
+function InlineRename({
+  initial,
+  onCommit,
+  onCancel,
+  className,
+}: {
+  initial: string;
+  onCommit: (next: string) => void;
+  onCancel: () => void;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const commit = () => {
+    const v = draft.trim();
+    if (!v || v === initial) onCancel();
+    else onCommit(v);
+  };
+  return (
+    <input
+      ref={ref}
+      className={`bg-canvas-bg border border-canvas-accent rounded px-1 py-0 text-canvas-text outline-none ${className ?? ''}`}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        // Stop key events from bubbling to canvas-store hotkeys.
+        e.stopPropagation();
+      }}
+      onBlur={commit}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
+/** Context menu item; null entries render as separators. */
+type CtxItem = { label: string; onClick: () => void; danger?: boolean } | null;
+
+/**
+ * Lightweight floating context menu. Positions itself at (x,y) and closes on
+ * outside-click or Escape. Caller controls visibility via `open` and `onClose`.
+ */
+function ContextMenu({
+  open,
+  x,
+  y,
+  items,
+  onClose,
+}: {
+  open: boolean;
+  x: number;
+  y: number;
+  items: CtxItem[];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const close = () => onClose();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    // Defer the click listener by one frame so the same click that opened the
+    // menu doesn't immediately close it.
+    const id = window.setTimeout(() => {
+      window.addEventListener('mousedown', close);
+      window.addEventListener('contextmenu', close);
+    }, 0);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('contextmenu', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      className="fixed z-50 bg-canvas-surface border border-canvas-border rounded shadow-lg py-1 min-w-[160px]"
+      style={{ left: x, top: y }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {items.map((it, i) =>
+        it === null ? (
+          <div key={`sep-${i}`} className="my-1 border-t border-canvas-border" />
+        ) : (
+          <button
+            key={`mi-${i}`}
+            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-border ${it.danger ? 'text-red-400 hover:text-red-300' : 'text-canvas-text'}`}
+            onClick={() => { it.onClick(); onClose(); }}
+          >
+            {it.label}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
 function TerminalLeftIcon({ item }: { item: CanvasItem }) {
   if (item.type !== 'terminal') {
     const Icon = TYPE_ICON[item.type];
@@ -174,10 +283,20 @@ function Divider({
   );
 }
 
+/** Carrier MIME for tile drag-and-drop. Custom prefix avoids collisions with
+ *  any system DnD source (files, links, plain text). */
+const TILE_DRAG_MIME = 'application/x-ab-tile';
+
 /**
  * One tile inside a multi-tab group. Its own toolbar (refresh / hide / kill)
  * applies to this tile only — same UX as the canvas Window component, but
  * fitted into a tiled cell.
+ *
+ * When `onSwap` is provided (i.e. the tile lives inside a group), the title
+ * bar becomes a drag handle and the tile becomes a drop target. Dropping
+ * source A onto target B swaps their positions in `group.members`. The
+ * positional sizes (outer/inner) are intentionally NOT moved with the
+ * identity, so each tile inherits the slot sizing the user already chose.
  */
 function Tile({
   item,
@@ -185,22 +304,83 @@ function Tile({
   onActivate,
   onHide,
   onKill,
+  onSwap,
 }: {
   item: CanvasItem;
   isActive: boolean;
   onActivate: () => void;
   onHide: () => void;
   onKill: () => void;
+  /** Provided only inside a group; absent for the solo focused-item view. */
+  onSwap?: (srcId: string, dstId: string) => void;
 }) {
+  const dndEnabled = !!onSwap;
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDropTarget, setIsDropTarget] = useState(false);
+  // Track depth of nested dragenter/leave events so children don't flicker the highlight.
+  const dragDepthRef = useRef(0);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    if (!dndEnabled) return;
+    e.dataTransfer.setData(TILE_DRAG_MIME, item.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  };
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!dndEnabled) return;
+    if (!Array.from(e.dataTransfer.types).includes(TILE_DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!dndEnabled) return;
+    if (!Array.from(e.dataTransfer.types).includes(TILE_DRAG_MIME)) return;
+    dragDepthRef.current += 1;
+    setIsDropTarget(true);
+  };
+  const handleDragLeave = () => {
+    if (!dndEnabled) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDropTarget(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    if (!dndEnabled) return;
+    const srcId = e.dataTransfer.getData(TILE_DRAG_MIME);
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDropTarget(false);
+    if (srcId && srcId !== item.id) onSwap!(srcId, item.id);
+  };
+
+  const borderClass = isDropTarget
+    ? 'border-canvas-accent ring-2 ring-canvas-accent/40'
+    : isActive
+      ? 'border-canvas-accent/40'
+      : 'border-canvas-border';
+  const opacityClass = isDragging ? 'opacity-40' : '';
+
   return (
     <div
       // flex-1 is critical: without it the tile collapses to its toolbar's
       // content height and the inner ItemBody (terminal/notes) renders with
       // 0 height — terminal shows just one row of output.
-      className={`flex-1 flex flex-col min-w-0 min-h-0 border ${isActive ? 'border-canvas-accent/40' : 'border-canvas-border'} bg-canvas-bg`}
+      className={`flex-1 flex flex-col min-w-0 min-h-0 border ${borderClass} ${opacityClass} bg-canvas-bg`}
       onPointerDown={onActivate}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
-      <div className="flex items-center gap-1 shrink-0 px-2 py-1 border-b border-canvas-border bg-canvas-surface">
+      <div
+        className={`flex items-center gap-1 shrink-0 px-2 py-1 border-b border-canvas-border bg-canvas-surface ${dndEnabled ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        draggable={dndEnabled}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        title={dndEnabled ? 'Drag to swap with another tile in this group' : undefined}
+      >
         <TerminalLeftIcon item={item} />
         <span className="flex-1 truncate text-[10px] text-canvas-muted">
           {getCanvasItemTitle(item, { fullPath: true })}
@@ -209,6 +389,7 @@ function Tile({
           <button
             className="p-1 rounded hover:bg-canvas-border text-canvas-muted hover:text-canvas-accent"
             onClick={(e) => { e.stopPropagation(); forceTerminalRefresh(item.ptyId!); }}
+            onPointerDown={(e) => e.stopPropagation()}
             title="Force redraw"
           >
             <RotateCw size={11} />
@@ -217,6 +398,7 @@ function Tile({
         <button
           className="p-1 rounded hover:bg-canvas-border text-canvas-muted hover:text-canvas-text"
           onClick={(e) => { e.stopPropagation(); onHide(); }}
+          onPointerDown={(e) => e.stopPropagation()}
           title="Hide window (keeps the session alive)"
         >
           <Minus size={11} />
@@ -224,6 +406,7 @@ function Tile({
         <button
           className="p-1 rounded hover:bg-red-500/20 text-canvas-muted hover:text-red-400"
           onClick={(e) => { e.stopPropagation(); onKill(); }}
+          onPointerDown={(e) => e.stopPropagation()}
           title="Kill instance"
         >
           <X size={11} />
@@ -274,6 +457,7 @@ function TileGroup({
   onHide,
   onKill,
   onResize,
+  onSwap,
 }: {
   items: CanvasItem[];
   layout: IdeGroupLayout;
@@ -283,6 +467,7 @@ function TileGroup({
   onHide: (id: string) => void;
   onKill: (item: CanvasItem) => void;
   onResize: (sizes: IdeGroupSizes) => void;
+  onSwap: (srcId: string, dstId: string) => void;
 }) {
   const outerRef = useRef<HTMLDivElement>(null);
   // For grid: one ref per row so inner-divider drag uses that row's clientWidth.
@@ -296,6 +481,7 @@ function TileGroup({
       onActivate={() => onActivate(it.id)}
       onHide={() => onHide(it.id)}
       onKill={() => onKill(it)}
+      onSwap={onSwap}
     />
   );
 
@@ -406,6 +592,7 @@ function GroupView({
   onAddMember,
   onRemoveMember,
   onKillMember,
+  onSwapMembers,
 }: {
   group: IdeGroup;
   allItems: CanvasItem[];
@@ -416,6 +603,7 @@ function GroupView({
   onAddMember: (itemId: string) => void;
   onRemoveMember: (itemId: string) => void;
   onKillMember: (item: CanvasItem) => void;
+  onSwapMembers: (srcId: string, dstId: string) => void;
 }) {
   // Hydrate members → items (filter orphans).
   const members = useMemo(
@@ -561,6 +749,7 @@ function GroupView({
           onHide={(id) => onRemoveMember(id)}
           onKill={(it) => onKillMember(it)}
           onResize={onSetSizes}
+          onSwap={onSwapMembers}
         />
       )}
 
@@ -595,10 +784,28 @@ export default function IdeLayout() {
   const renameIdeGroup = useCanvasStore((s) => s.renameIdeGroup);
   const addMemberToGroup = useCanvasStore((s) => s.addMemberToGroup);
   const removeMemberFromGroup = useCanvasStore((s) => s.removeMemberFromGroup);
+  const swapGroupMembers = useCanvasStore((s) => s.swapGroupMembers);
   const setGroupLayout = useCanvasStore((s) => s.setGroupLayout);
   const setGroupSizes = useCanvasStore((s) => s.setGroupSizes);
   const addItem = useCanvasStore((s) => s.addItem);
   const removeItem = useCanvasStore((s) => s.removeItem);
+  const updateItem = useCanvasStore((s) => s.updateItem);
+
+  // Rename state. `editing` identifies which entry is in inline-edit mode.
+  // The same id can appear in two visual locations (tab strip + sidebar);
+  // `scope` disambiguates so only the originally double-clicked / context-
+  // menu-targeted instance shows the input. id format: 'group:xxx' or item id.
+  const [editing, setEditing] = useState<{ id: string; scope: 'tab' | 'sidebar' } | null>(null);
+  // Right-click context menu state. `forId` matches a sidebar entry id; the
+  // visible items in the menu depend on whether forId is a group or an item.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; forId: string } | null>(null);
+
+  // Single rename dispatcher: groups vs canvas items go to different actions.
+  const commitRename = useCallback((id: string, name: string) => {
+    if (id.startsWith('group:')) renameIdeGroup(id, name);
+    else updateItem(id, { label: name });
+    setEditing(null);
+  }, [renameIdeGroup, updateItem]);
 
   // Index groups by id for cheap lookups.
   const groupsById = useMemo(() => {
@@ -725,19 +932,37 @@ export default function IdeLayout() {
             </div>
             {ideGroups.map((g) => {
               const isActive = focusedItemId === g.id;
+              const isEditing = editing?.id === g.id && editing.scope === 'sidebar';
               return (
-                <button
+                <div
                   key={g.id}
-                  className={`w-full flex items-center gap-2 px-3 py-1 text-xs text-left transition-colors ${
+                  role="button"
+                  tabIndex={0}
+                  className={`w-full flex items-center gap-2 px-3 py-1 text-xs text-left transition-colors cursor-pointer ${
                     isActive ? 'bg-canvas-accent/20 text-canvas-text' : 'text-canvas-text hover:bg-canvas-border'
                   }`}
-                  onClick={() => openIdeTab(g.id)}
+                  onClick={() => { if (!isEditing) openIdeTab(g.id); }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setCtxMenu({ x: e.clientX, y: e.clientY, forId: g.id });
+                  }}
                   title={`${g.name} — ${g.members.length} members`}
                 >
                   <LayoutGrid size={12} className="text-canvas-accent shrink-0" />
-                  <span className="truncate flex-1">{g.name}</span>
-                  <span className="text-[9px] opacity-60">{g.members.length}</span>
-                </button>
+                  {isEditing ? (
+                    <InlineRename
+                      initial={g.name}
+                      onCommit={(next) => commitRename(g.id, next)}
+                      onCancel={() => setEditing(null)}
+                      className="text-xs flex-1 min-w-0"
+                    />
+                  ) : (
+                    <>
+                      <span className="truncate flex-1">{g.name}</span>
+                      <span className="text-[9px] opacity-60">{g.members.length}</span>
+                    </>
+                  )}
+                </div>
               );
             })}
             {ideGroups.length === 0 && (
@@ -761,22 +986,40 @@ export default function IdeLayout() {
                 )}
                 {!isCollapsed && g.items.map((item) => {
                   const isActive = focusedItemId === item.id;
+                  const isEditing = editing?.id === item.id && editing.scope === 'sidebar';
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      className={`w-full flex items-center gap-2 px-3 py-1 text-xs text-left transition-colors ${
+                      role="button"
+                      tabIndex={0}
+                      className={`w-full flex items-center gap-2 px-3 py-1 text-xs text-left transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-canvas-accent/20 text-canvas-text'
                           : 'text-canvas-text hover:bg-canvas-border'
                       }`}
-                      onClick={() => openIdeTab(item.id)}
+                      onClick={() => { if (!isEditing) openIdeTab(item.id); }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCtxMenu({ x: e.clientX, y: e.clientY, forId: item.id });
+                      }}
                       title={getCanvasItemTitle(item, { fullPath: true })}
                     >
                       <TerminalLeftIcon item={item} />
-                      <span className="truncate flex-1">{getCanvasItemTitle(item)}</span>
-                      {item.pinned && <span className="text-[9px] text-canvas-accent" title="Pinned">📌</span>}
-                      {item.window?.locked && <span className="text-[9px] text-canvas-muted" title="Locked">🔒</span>}
-                    </button>
+                      {isEditing ? (
+                        <InlineRename
+                          initial={getCanvasItemTitle(item)}
+                          onCommit={(next) => commitRename(item.id, next)}
+                          onCancel={() => setEditing(null)}
+                          className="text-xs flex-1 min-w-0"
+                        />
+                      ) : (
+                        <>
+                          <span className="truncate flex-1">{getCanvasItemTitle(item)}</span>
+                          {item.pinned && <span className="text-[9px] text-canvas-accent" title="Pinned">📌</span>}
+                          {item.window?.locked && <span className="text-[9px] text-canvas-muted" title="Locked">🔒</span>}
+                        </>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -809,21 +1052,39 @@ export default function IdeLayout() {
             const fullTitle = tab.kind === 'item'
               ? getCanvasItemTitle(tab.item, { fullPath: true })
               : `${tab.group.name} — ${tab.group.members.length} member(s)`;
+            const isEditing = editing?.id === tab.id && editing.scope === 'tab';
             return (
               <div
                 key={tab.id}
                 className={`group/tab flex items-center gap-2 px-3 py-1.5 text-xs border-r border-canvas-border cursor-pointer ${
                   isActive ? 'bg-canvas-bg text-canvas-text' : 'text-canvas-muted hover:bg-canvas-border/50'
                 }`}
-                onClick={() => setIdeFocusedItem(tab.id)}
+                onClick={() => { if (!isEditing) setIdeFocusedItem(tab.id); }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setEditing({ id: tab.id, scope: 'tab' });
+                }}
                 onAuxClick={(e) => { if (e.button === 1) closeIdeTab(tab.id); }}
-                title={`${fullTitle} — click=focus, middle-click=close tab`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setCtxMenu({ x: e.clientX, y: e.clientY, forId: tab.id });
+                }}
+                title={`${fullTitle} — click=focus, double-click=rename, right-click=menu, middle-click=close`}
               >
                 {tab.kind === 'item'
                   ? <TerminalLeftIcon item={tab.item} />
                   : <LayoutGrid size={12} className="text-canvas-accent shrink-0" />}
-                <span className="max-w-[160px] truncate">{label}</span>
-                {tab.kind === 'group' && (
+                {isEditing ? (
+                  <InlineRename
+                    initial={label}
+                    onCommit={(next) => commitRename(tab.id, next)}
+                    onCancel={() => setEditing(null)}
+                    className="text-xs max-w-[200px]"
+                  />
+                ) : (
+                  <span className="max-w-[160px] truncate">{label}</span>
+                )}
+                {tab.kind === 'group' && !isEditing && (
                   <span className="text-[9px] text-canvas-accent shrink-0">×{tab.group.members.length}</span>
                 )}
                 <button
@@ -850,6 +1111,7 @@ export default function IdeLayout() {
             onAddMember={(itemId) => addMemberToGroup(focusedGroup.id, itemId)}
             onRemoveMember={(itemId) => removeMemberFromGroup(focusedGroup.id, itemId)}
             onKillMember={(it) => setKillCandidate(it)}
+            onSwapMembers={(srcId, dstId) => swapGroupMembers(focusedGroup.id, srcId, dstId)}
           />
         ) : focusedItem ? (
           <Tile
@@ -888,6 +1150,40 @@ export default function IdeLayout() {
           }
         }}
         onClose={() => setKillCandidate(null)}
+      />
+
+      {/* Right-click context menu — items vary based on whether the target is
+          a group or a canvas item. Closes via ContextMenu's own outside-click. */}
+      <ContextMenu
+        open={ctxMenu !== null}
+        x={ctxMenu?.x ?? 0}
+        y={ctxMenu?.y ?? 0}
+        items={(() => {
+          if (!ctxMenu) return [];
+          const id = ctxMenu.forId;
+          if (id.startsWith('group:')) {
+            const g = groupsById.get(id);
+            if (!g) return [];
+            return [
+              { label: 'Rename group', onClick: () => setEditing({ id, scope: 'sidebar' }) },
+              { label: 'Open as tab', onClick: () => openIdeTab(id) },
+              null,
+              { label: 'Delete group', danger: true, onClick: () => deleteIdeGroup(id) },
+            ];
+          }
+          const it = items.find((i) => i.id === id);
+          if (!it) return [];
+          const tabOpen = openTabIds.includes(id);
+          return [
+            { label: 'Rename', onClick: () => setEditing({ id, scope: 'sidebar' }) },
+            tabOpen
+              ? { label: 'Close tab', onClick: () => closeIdeTab(id) }
+              : { label: 'Open as tab', onClick: () => openIdeTab(id) },
+            null,
+            { label: it.type === 'terminal' ? 'Kill session' : 'Delete', danger: true, onClick: () => setKillCandidate(it) },
+          ];
+        })()}
+        onClose={() => setCtxMenu(null)}
       />
     </div>
   );

@@ -600,6 +600,7 @@ interface CanvasState {
   renameIdeGroup: (groupId: string, name: string) => void;
   addMemberToGroup: (groupId: string, itemId: string) => void;
   removeMemberFromGroup: (groupId: string, itemId: string) => void;
+  swapGroupMembers: (groupId: string, idA: string, idB: string) => void;
   setGroupLayout: (groupId: string, layout: IdeGroupLayout) => void;
   setGroupSizes: (groupId: string, sizes: IdeGroupSizes) => void;
 }
@@ -1553,6 +1554,24 @@ export const useCanvasStore = create<CanvasState>()(
           : 'single';
         const sizes = buildDefaultSizes(layout, members.length);
         return { ...g, members, layout, sizes };
+      });
+      set({ ideGroups: groups });
+      saveIdePrefs(state.boardAgentId, { groups });
+    },
+    swapGroupMembers: (groupId, idA, idB) => {
+      if (idA === idB) return;
+      const state = get();
+      const groups = state.ideGroups.map((g) => {
+        if (g.id !== groupId) return g;
+        const ia = g.members.indexOf(idA);
+        const ib = g.members.indexOf(idB);
+        if (ia < 0 || ib < 0) return g;
+        const members = [...g.members];
+        members[ia] = idB;
+        members[ib] = idA;
+        // Sizes are positional, not identity-based — leave them as-is so the
+        // swapped tiles take on the slot sizes the user already configured.
+        return { ...g, members };
       });
       set({ ideGroups: groups });
       saveIdePrefs(state.boardAgentId, { groups });
