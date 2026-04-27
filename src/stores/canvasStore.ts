@@ -601,6 +601,7 @@ interface CanvasState {
   addMemberToGroup: (groupId: string, itemId: string) => void;
   removeMemberFromGroup: (groupId: string, itemId: string) => void;
   swapGroupMembers: (groupId: string, idA: string, idB: string) => void;
+  reorderIdeTab: (srcId: string, dstId: string | null, side: 'before' | 'after') => void;
   setGroupLayout: (groupId: string, layout: IdeGroupLayout) => void;
   setGroupSizes: (groupId: string, sizes: IdeGroupSizes) => void;
 }
@@ -1575,6 +1576,28 @@ export const useCanvasStore = create<CanvasState>()(
       });
       set({ ideGroups: groups });
       saveIdePrefs(state.boardAgentId, { groups });
+    },
+    reorderIdeTab: (srcId, dstId, side) => {
+      // Reorder ideOpenTabIds: remove srcId, reinsert relative to dstId.
+      // dstId === null means "drop at the very end of the strip".
+      if (srcId === dstId) return;
+      const state = get();
+      const tabs = state.ideOpenTabIds;
+      if (!tabs.includes(srcId)) return;
+      const without = tabs.filter((t) => t !== srcId);
+      let insertAt: number;
+      if (dstId === null) {
+        insertAt = without.length;
+      } else {
+        const idx = without.indexOf(dstId);
+        if (idx < 0) return;
+        insertAt = side === 'before' ? idx : idx + 1;
+      }
+      const next = [...without.slice(0, insertAt), srcId, ...without.slice(insertAt)];
+      // No-op if order unchanged (e.g. dropping a tab right next to itself).
+      if (next.length === tabs.length && next.every((t, i) => t === tabs[i])) return;
+      set({ ideOpenTabIds: next });
+      saveIdePrefs(state.boardAgentId, { openTabIds: next });
     },
     setGroupLayout: (groupId, layout) => {
       const state = get();

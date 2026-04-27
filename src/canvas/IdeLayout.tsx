@@ -286,6 +286,9 @@ function Divider({
 /** Carrier MIME for tile drag-and-drop. Custom prefix avoids collisions with
  *  any system DnD source (files, links, plain text). */
 const TILE_DRAG_MIME = 'application/x-ab-tile';
+/** Carrier MIME for tab-strip reorder DnD. Distinct from TILE_DRAG_MIME so a
+ *  tab drag never accidentally triggers the in-group tile-swap path. */
+const TAB_DRAG_MIME = 'application/x-ab-tab';
 
 /**
  * One tile inside a multi-tab group. Its own toolbar (refresh / hide / kill)
@@ -785,6 +788,7 @@ export default function IdeLayout() {
   const addMemberToGroup = useCanvasStore((s) => s.addMemberToGroup);
   const removeMemberFromGroup = useCanvasStore((s) => s.removeMemberFromGroup);
   const swapGroupMembers = useCanvasStore((s) => s.swapGroupMembers);
+  const reorderIdeTab = useCanvasStore((s) => s.reorderIdeTab);
   const setGroupLayout = useCanvasStore((s) => s.setGroupLayout);
   const setGroupSizes = useCanvasStore((s) => s.setGroupSizes);
   const addItem = useCanvasStore((s) => s.addItem);
@@ -799,6 +803,13 @@ export default function IdeLayout() {
   // Right-click context menu state. `forId` matches a sidebar entry id; the
   // visible items in the menu depend on whether forId is a group or an item.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; forId: string } | null>(null);
+
+  // Tab DnD state. `draggingId` is the tab being moved (so we can dim it);
+  // `dropTarget` is the tab + side currently under the cursor (drives the
+  // accent-colored insertion cue). `dropTarget.id === null` means "after the
+  // last tab" (the end-of-strip dropzone).
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null);
+  const [tabDropTarget, setTabDropTarget] = useState<{ id: string | null; side: 'before' | 'after' } | null>(null);
 
   // Single rename dispatcher: groups vs canvas items go to different actions.
   const commitRename = useCallback((id: string, name: string) => {
@@ -884,26 +895,28 @@ export default function IdeLayout() {
       >
         <div className="flex items-center gap-2 px-3 py-2 border-b border-canvas-border shrink-0">
           <span className="text-xs uppercase tracking-wider text-canvas-muted flex-1">Explorer</span>
-          <button
-            className="p-1 rounded hover:bg-canvas-border text-canvas-muted relative"
-            onClick={() => setSortMenuOpen((v) => !v)}
-            title={`Sort: ${SORT_LABEL[sort]}`}
-          >
-            <ArrowDownUp size={12} />
-          </button>
-          {sortMenuOpen && (
-            <div className="absolute right-2 top-9 z-10 bg-canvas-surface border border-canvas-border rounded shadow-lg py-1 min-w-[120px]">
-              {(Object.keys(SORT_LABEL) as IdeSortMode[]).map((s) => (
-                <button
-                  key={s}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-border ${s === sort ? 'text-canvas-accent' : 'text-canvas-text'}`}
-                  onClick={() => { setIdeSort(s); setSortMenuOpen(false); }}
-                >
-                  {SORT_LABEL[s]}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="relative">
+            <button
+              className="p-1 rounded hover:bg-canvas-border text-canvas-muted"
+              onClick={() => setSortMenuOpen((v) => !v)}
+              title={`Sort: ${SORT_LABEL[sort]}`}
+            >
+              <ArrowDownUp size={12} />
+            </button>
+            {sortMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-canvas-surface border border-canvas-border rounded shadow-lg py-1 min-w-[120px]">
+                {(Object.keys(SORT_LABEL) as IdeSortMode[]).map((s) => (
+                  <button
+                    key={s}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-canvas-border ${s === sort ? 'text-canvas-accent' : 'text-canvas-text'}`}
+                    onClick={() => { setIdeSort(s); setSortMenuOpen(false); }}
+                  >
+                    {SORT_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             className="p-1 rounded hover:bg-canvas-border text-canvas-muted"
             title="New terminal"
@@ -1041,7 +1054,14 @@ export default function IdeLayout() {
 
       {/* Main pane */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Tab strip — heterogeneous: tabs may be items or groups. */}
+        {/* Tab strip — heterogeneous: tabs may be items or groups.
+            Each tab is draggable (HTML5 DnD, MIME application/x-ab-tab) and
+            also a drop target. Cursor X relative to the tab's box picks the
+            insertion side; a 2px accent-colored bar on that edge previews the
+            drop. The flex-1 trailing dropzone catches drops past the last
+            tab so users can move a tab to the very end. The MIME is distinct
+            from TILE_DRAG_MIME so reordering tabs never collides with the
+            in-group tile-swap DnD. */}
         <div className="flex items-stretch shrink-0 border-b border-canvas-border bg-canvas-surface overflow-x-auto">
           {tabs.length === 0 && (
             <div className="px-3 py-2 text-xs text-canvas-muted">No open tabs</div>
@@ -1053,12 +1073,51 @@ export default function IdeLayout() {
               ? getCanvasItemTitle(tab.item, { fullPath: true })
               : `${tab.group.name} — ${tab.group.members.length} member(s)`;
             const isEditing = editing?.id === tab.id && editing.scope === 'tab';
+            const isDragging = draggingTabId === tab.id;
+            const dropOnThis = tabDropTarget?.id === tab.id ? tabDropTarget.side : null;
             return (
               <div
                 key={tab.id}
-                className={`group/tab flex items-center gap-2 px-3 py-1.5 text-xs border-r border-canvas-border cursor-pointer ${
+                className={`relative group/tab flex items-center gap-2 px-3 py-1.5 text-xs border-r border-canvas-border cursor-pointer ${
                   isActive ? 'bg-canvas-bg text-canvas-text' : 'text-canvas-muted hover:bg-canvas-border/50'
-                }`}
+                } ${isDragging ? 'opacity-40' : ''}`}
+                draggable={!isEditing}
+                onDragStart={(e) => {
+                  if (isEditing) { e.preventDefault(); return; }
+                  e.dataTransfer.setData(TAB_DRAG_MIME, tab.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                  setDraggingTabId(tab.id);
+                }}
+                onDragEnd={() => {
+                  setDraggingTabId(null);
+                  setTabDropTarget(null);
+                }}
+                onDragOver={(e) => {
+                  if (!Array.from(e.dataTransfer.types).includes(TAB_DRAG_MIME)) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const side: 'before' | 'after' = (e.clientX - rect.left) < rect.width / 2 ? 'before' : 'after';
+                  if (tabDropTarget?.id !== tab.id || tabDropTarget?.side !== side) {
+                    setTabDropTarget({ id: tab.id, side });
+                  }
+                }}
+                onDragLeave={(e) => {
+                  // Only clear if we're leaving the tab box itself (not entering a child).
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+                    if (tabDropTarget?.id === tab.id) setTabDropTarget(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  if (!Array.from(e.dataTransfer.types).includes(TAB_DRAG_MIME)) return;
+                  e.preventDefault();
+                  const srcId = e.dataTransfer.getData(TAB_DRAG_MIME);
+                  const target = tabDropTarget;
+                  setTabDropTarget(null);
+                  setDraggingTabId(null);
+                  if (srcId && target) reorderIdeTab(srcId, tab.id, target.side);
+                }}
                 onClick={() => { if (!isEditing) setIdeFocusedItem(tab.id); }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
@@ -1069,8 +1128,12 @@ export default function IdeLayout() {
                   e.preventDefault();
                   setCtxMenu({ x: e.clientX, y: e.clientY, forId: tab.id });
                 }}
-                title={`${fullTitle} — click=focus, double-click=rename, right-click=menu, middle-click=close`}
+                title={`${fullTitle} — click=focus, drag=reorder, double-click=rename, right-click=menu, middle-click=close`}
               >
+                {/* Drop-side cue */}
+                {dropOnThis === 'before' && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-canvas-accent pointer-events-none" />}
+                {dropOnThis === 'after' && <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-canvas-accent pointer-events-none" />}
+
                 {tab.kind === 'item'
                   ? <TerminalLeftIcon item={tab.item} />
                   : <LayoutGrid size={12} className="text-canvas-accent shrink-0" />}
@@ -1097,6 +1160,36 @@ export default function IdeLayout() {
               </div>
             );
           })}
+          {/* End-of-strip dropzone — accepts drops at "after the last tab".
+              flex-1 grows to fill remaining horizontal space. */}
+          {tabs.length > 0 && (
+            <div
+              className={`flex-1 min-w-[40px] relative ${tabDropTarget?.id === null ? 'bg-canvas-accent/5' : ''}`}
+              onDragOver={(e) => {
+                if (!Array.from(e.dataTransfer.types).includes(TAB_DRAG_MIME)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (tabDropTarget?.id !== null || tabDropTarget?.side !== 'after') {
+                  setTabDropTarget({ id: null, side: 'after' });
+                }
+              }}
+              onDragLeave={() => {
+                if (tabDropTarget?.id === null) setTabDropTarget(null);
+              }}
+              onDrop={(e) => {
+                if (!Array.from(e.dataTransfer.types).includes(TAB_DRAG_MIME)) return;
+                e.preventDefault();
+                const srcId = e.dataTransfer.getData(TAB_DRAG_MIME);
+                setTabDropTarget(null);
+                setDraggingTabId(null);
+                if (srcId) reorderIdeTab(srcId, null, 'after');
+              }}
+            >
+              {tabDropTarget?.id === null && (
+                <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-canvas-accent pointer-events-none" />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Active entity — group view, single tile, or empty. */}
