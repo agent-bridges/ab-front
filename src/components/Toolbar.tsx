@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import {
   ZoomIn, ZoomOut, Maximize, Terminal,
   Columns3, Rows3, LayoutGrid, Menu, X, AppWindow, XSquare, LogOut, Minus, Map, MapPin,
-  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User, Columns2,
+  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User, Columns2, Keyboard,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useAuthStore } from '../stores/authStore';
+import { useKeyboardStore } from '../stores/keyboardStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { logout as logoutRequest } from '../api/auth';
 import { deleteCanvasLayoutSnapshot, listCanvasLayouts, type CanvasLayoutSummary } from '../api/canvas';
@@ -74,6 +75,8 @@ export default function Toolbar() {
     saveLayoutSnapshotToServer, loadLayoutSnapshotFromServer,
     viewMode, setViewMode,
   } = useCanvasStore();
+  const kbVisible = useKeyboardStore((s) => s.keyboard.visible);
+  const setKeyboardVisible = useKeyboardStore((s) => s.setKeyboardVisible);
   const isMobile = useIsMobile();
   const [menuOpen, setMenuOpen] = useState(false);
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
@@ -343,6 +346,13 @@ export default function Toolbar() {
               </>
             )}
           </div>
+          <button
+            onClick={() => setKeyboardVisible(!kbVisible)}
+            className="inline-flex items-center justify-center rounded hover:bg-canvas-border p-1 shrink-0"
+            title={kbVisible ? 'Hide on-screen keyboard' : 'Show on-screen keyboard'}
+          >
+            <Keyboard size={16} className={kbVisible ? 'text-canvas-accent' : 'text-canvas-muted'} />
+          </button>
           <button
             onClick={() => setConnectionSettingsOpen(true)}
             className="inline-flex items-center justify-center rounded hover:bg-canvas-border p-1 shrink-0"

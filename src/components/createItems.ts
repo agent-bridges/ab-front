@@ -1,4 +1,4 @@
-import { Terminal, FolderOpen, StickyNote, MapPin } from 'lucide-react';
+import { Terminal, FolderOpen, StickyNote, MapPin, Cable } from 'lucide-react';
 import { saveItemLayout } from '../api/canvas';
 import { createPty } from '../api/pty';
 import type { CanvasItem, CanvasItemType } from '../types';
@@ -8,6 +8,7 @@ export const CREATE_ITEMS: { type: CanvasItemType; label: string; icon: typeof T
   { type: 'filebrowser', label: 'Files', icon: FolderOpen },
   { type: 'notes', label: 'Note', icon: StickyNote },
   { type: 'anchor', label: 'Anchor', icon: MapPin },
+  { type: 'tunnels', label: 'Tunnels', icon: Cable },
 ];
 
 interface CreateCanvasItemOptions {

@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Minus, RefreshCw, Terminal, FolderOpen, StickyNote, X, Eye, Pencil, Lock, Unlock, MapPin } from 'lucide-react';
+import { Minus, RefreshCw, Terminal, FolderOpen, StickyNote, X, Eye, Pencil, Lock, Unlock, MapPin, Cable } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { getTerminalStatusDetail, getTerminalStatusMeta } from '../components/ProcessIndicator';
@@ -10,6 +10,7 @@ import TerminalView from '../components/terminal/TerminalView';
 import { forceRefresh } from '../components/terminal/TerminalCache';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
+import TunnelsView from '../components/tunnels/TunnelsView';
 import type { CanvasItem, CanvasItemType } from '../types';
 import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import { useNoteViewMode } from '../hooks/useNoteViewMode';
@@ -20,6 +21,7 @@ const ICONS: Partial<Record<CanvasItemType, typeof Terminal>> = {
   filebrowser: FolderOpen,
   notes: StickyNote,
   anchor: MapPin,
+  tunnels: Cable,
 };
 
 const MIN_W = 300;
@@ -276,6 +278,16 @@ export default function Window({
             <RefreshCw size={10} className="text-canvas-muted" />
           </button>
         )}
+        {item.type === 'tunnels' && (
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('ab-tunnels-refresh', { detail: { itemId: item.id } })); }}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-canvas-accent/30"
+            title="Refresh tunnels"
+          >
+            <RefreshCw size={10} className="text-canvas-muted" />
+          </button>
+        )}
         {!isMobile && (
           <div className="flex items-center gap-1 shrink-0">
             {SIZE_PRESETS.map(({ label, fraction }) => (
@@ -333,6 +345,7 @@ export default function Window({
         {item.type === 'terminal' && <TerminalView item={item} />}
         {item.type === 'filebrowser' && <FileBrowserView item={item} />}
         {item.type === 'notes' && <NotesEditor item={item} mode={noteMode} />}
+        {item.type === 'tunnels' && <TunnelsView item={item} />}
       </div>
 
       {!isMobile && (

@@ -1,4 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useAgentStore } from '../stores/agentStore';
+import { useKeyboardStore } from '../stores/keyboardStore';
 import {
   Terminal as TerminalIcon,
   FolderOpen,
@@ -14,11 +16,20 @@ import {
   Columns3,
   Rows3,
   LayoutGrid,
+  Cable,
+  LayoutList,
+  List as ListIcon,
+  Eye,
+  Pencil,
+  Keyboard,
 } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import TerminalView from '../components/terminal/TerminalView';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
+import { useNoteViewMode, type NoteViewMode } from '../hooks/useNoteViewMode';
+import TunnelsView from '../components/tunnels/TunnelsView';
+import { fetchCanvasItems, loadIdePrefs as loadIdePrefsForAgent } from '../api/canvas';
 import { forceRefresh as forceTerminalRefresh } from '../components/terminal/TerminalCache';
 import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
@@ -32,6 +43,7 @@ const TYPE_LABEL: Record<CanvasItemType, string> = {
   notes: 'Notes',
   filebrowser: 'Files',
   anchor: 'Anchors',
+  tunnels: 'Tunnels',
 };
 
 const TYPE_ICON: Record<CanvasItemType, typeof TerminalIcon> = {
@@ -39,10 +51,11 @@ const TYPE_ICON: Record<CanvasItemType, typeof TerminalIcon> = {
   notes: StickyNote,
   filebrowser: FolderOpen,
   anchor: MapPin,
+  tunnels: Cable,
 };
 
 // Section render order for 'type' sort.
-const TYPE_ORDER: CanvasItemType[] = ['terminal', 'notes', 'filebrowser', 'anchor'];
+const TYPE_ORDER: CanvasItemType[] = ['terminal', 'notes', 'filebrowser', 'anchor', 'tunnels'];
 
 const SORT_LABEL: Record<IdeSortMode, string> = {
   type: 'Type',
@@ -209,7 +222,7 @@ function TerminalLeftIcon({ item }: { item: CanvasItem }) {
   return <TerminalIcon size={14} className="text-canvas-muted shrink-0" />;
 }
 
-function ItemBody({ item }: { item: CanvasItem }) {
+function ItemBody({ item, noteMode }: { item: CanvasItem; noteMode?: NoteViewMode }) {
   switch (item.type) {
     case 'terminal':
       return (
@@ -220,7 +233,7 @@ function ItemBody({ item }: { item: CanvasItem }) {
     case 'notes':
       return (
         <div className="flex-1 min-h-0 overflow-auto bg-canvas-bg p-3">
-          <NotesEditor item={item} />
+          <NotesEditor item={item} mode={noteMode} />
         </div>
       );
     case 'filebrowser':
@@ -237,6 +250,12 @@ function ItemBody({ item }: { item: CanvasItem }) {
             <div>{getCanvasItemTitle(item)}</div>
             <div className="text-xs">Anchor — pan/zoom marker</div>
           </div>
+        </div>
+      );
+    case 'tunnels':
+      return (
+        <div className="flex-1 min-h-0 bg-canvas-bg">
+          <TunnelsView item={item} />
         </div>
       );
   }
@@ -322,6 +341,9 @@ function Tile({
   const [isDropTarget, setIsDropTarget] = useState(false);
   // Track depth of nested dragenter/leave events so children don't flicker the highlight.
   const dragDepthRef = useRef(0);
+  // Per-item view mode for notes (edit ↔ preview). Same hook the canvas Window
+  // toolbar uses; localStorage-backed and keyed by item.id so it persists.
+  const { mode: noteMode, setMode: setNoteMode } = useNoteViewMode(item.id);
 
   const handleDragStart = (e: React.DragEvent) => {
     if (!dndEnabled) return;
@@ -398,6 +420,16 @@ function Tile({
             <RotateCw size={11} />
           </button>
         )}
+        {item.type === 'notes' && (
+          <button
+            className="p-1 rounded hover:bg-canvas-border text-canvas-muted hover:text-canvas-text"
+            onClick={(e) => { e.stopPropagation(); setNoteMode(noteMode === 'edit' ? 'preview' : 'edit'); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            title={noteMode === 'edit' ? 'Preview markdown' : 'Edit note'}
+          >
+            {noteMode === 'edit' ? <Eye size={11} /> : <Pencil size={11} />}
+          </button>
+        )}
         <button
           className="p-1 rounded hover:bg-canvas-border text-canvas-muted hover:text-canvas-text"
           onClick={(e) => { e.stopPropagation(); onHide(); }}
@@ -415,7 +447,7 @@ function Tile({
           <X size={11} />
         </button>
       </div>
-      <ItemBody item={item} />
+      <ItemBody item={item} noteMode={noteMode} />
     </div>
   );
 }
@@ -794,6 +826,18 @@ export default function IdeLayout() {
   const addItem = useCanvasStore((s) => s.addItem);
   const removeItem = useCanvasStore((s) => s.removeItem);
   const updateItem = useCanvasStore((s) => s.updateItem);
+  const agents = useAgentStore((s) => s.agents);
+  const currentAgentId = useAgentStore((s) => s.currentAgentId);
+  const setCurrentAgent = useAgentStore((s) => s.setCurrentAgent);
+  // Floating-keyboard + scroll-bar paired toggle for the IDE sidebar header.
+  // ON if either widget is currently visible; clicking flips both to the
+  // opposite of the current ON state — so one tap on iPad shows or hides
+  // the whole touch-control set.
+  const kbVisible = useKeyboardStore((s) => s.keyboard.visible);
+  const scrollVisible = useKeyboardStore((s) => s.scroll.visible);
+  const setKeyboardVisible = useKeyboardStore((s) => s.setKeyboardVisible);
+  const setScrollVisible = useKeyboardStore((s) => s.setScrollVisible);
+  const touchKeysOn = kbVisible || scrollVisible;
 
   // Rename state. `editing` identifies which entry is in inline-edit mode.
   // The same id can appear in two visual locations (tab strip + sidebar);
@@ -886,6 +930,84 @@ export default function IdeLayout() {
   const [killCandidate, setKillCandidate] = useState<CanvasItem | null>(null);
   const [killBusy, setKillBusy] = useState(false);
 
+  // ===== Multi-agent expandable tree =====
+  // Set of agent ids that the user has expanded in the sidebar. The CURRENT
+  // agent is auto-included. Persisted globally per-browser so the user's
+  // mental model survives reloads and agent switches.
+  const [expandedAgentIds, setExpandedAgentIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('canvas-ide-expanded-agents');
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch { /* noop */ }
+    return new Set();
+  });
+  useEffect(() => {
+    localStorage.setItem('canvas-ide-expanded-agents', JSON.stringify([...expandedAgentIds]));
+  }, [expandedAgentIds]);
+  // Current agent is always implicitly expanded; merge it in when it changes.
+  useEffect(() => {
+    if (!currentAgentId) return;
+    setExpandedAgentIds((prev) => prev.has(currentAgentId) ? prev : new Set([...prev, currentAgentId]));
+  }, [currentAgentId]);
+
+  // Flat-mode toggle: hide type-grouping section headers (GROUPS/TERMINALS/...)
+  // under each expanded agent and render items as a flat list. Persisted.
+  const [flatMode, setFlatMode] = useState<boolean>(() => localStorage.getItem('canvas-ide-flat-mode') === '1');
+  useEffect(() => {
+    localStorage.setItem('canvas-ide-flat-mode', flatMode ? '1' : '0');
+  }, [flatMode]);
+
+  // Per-agent cache for non-current expanded agents (items + groups). The
+  // current agent uses live store state; non-current agents are fetched once
+  // when expanded and cached here. Manual refresh via right-click clears the
+  // entry so the next render re-fetches.
+  const [agentDataCache, setAgentDataCache] = useState<Record<string, { items: CanvasItem[]; groups: IdeGroup[]; loadedAt: number } | { error: string }>>({});
+
+  // Fetch on expand: any agent that is in the expanded set, is not current,
+  // and has no cache entry triggers a one-shot fetch.
+  useEffect(() => {
+    let cancelled = false;
+    for (const agentId of expandedAgentIds) {
+      if (agentId === currentAgentId) continue;
+      if (agentDataCache[agentId]) continue;
+      (async () => {
+        try {
+          const fetched = await fetchCanvasItems(agentId);
+          if (cancelled) return;
+          const prefs = loadIdePrefsForAgent(agentId);
+          setAgentDataCache((prev) => ({ ...prev, [agentId]: { items: fetched, groups: prefs.groups, loadedAt: Date.now() } }));
+        } catch (e) {
+          if (cancelled) return;
+          setAgentDataCache((prev) => ({ ...prev, [agentId]: { error: e instanceof Error ? e.message : String(e) } }));
+        }
+      })();
+    }
+    return () => { cancelled = true; };
+  }, [expandedAgentIds, currentAgentId, agentDataCache]);
+
+  // Click-through: clicking an item in a non-current agent's subtree should
+  // (1) switch current to that agent, (2) wait until items are loaded, then
+  // (3) open the requested tab. We can't openIdeTab synchronously because the
+  // store's items list still belongs to the previous agent at click time.
+  const [pendingNavigation, setPendingNavigation] = useState<{ agentId: string; itemId: string } | null>(null);
+  useEffect(() => {
+    if (!pendingNavigation) return;
+    if (pendingNavigation.agentId !== currentAgentId) return;
+    if (items.some((i) => i.id === pendingNavigation.itemId)) {
+      openIdeTab(pendingNavigation.itemId);
+      setPendingNavigation(null);
+    }
+  }, [pendingNavigation, currentAgentId, items, openIdeTab]);
+
+  const toggleAgentExpanded = useCallback((agentId: string) => {
+    setExpandedAgentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+  }, []);
+
   return (
     <div className="absolute inset-0 flex bg-canvas-bg">
       {/* Sidebar */}
@@ -918,6 +1040,24 @@ export default function IdeLayout() {
             )}
           </div>
           <button
+            className={`p-1 rounded text-canvas-muted ${flatMode ? 'bg-canvas-accent/20 text-canvas-accent' : 'hover:bg-canvas-border'}`}
+            title={flatMode ? 'Type-grouping: OFF (flat list). Click to group by type.' : 'Type-grouping: ON (sections by type). Click to flatten.'}
+            onClick={() => setFlatMode((v) => !v)}
+          >
+            {flatMode ? <ListIcon size={12} /> : <LayoutList size={12} />}
+          </button>
+          <button
+            className={`p-1 rounded text-canvas-muted ${touchKeysOn ? 'bg-canvas-accent/20 text-canvas-accent' : 'hover:bg-canvas-border'}`}
+            title={touchKeysOn ? 'Touch keys: ON (keyboard + scroll). Click to hide both.' : 'Touch keys: OFF. Click to show floating keyboard + scroll bar.'}
+            onClick={() => {
+              const next = !touchKeysOn;
+              setKeyboardVisible(next);
+              setScrollVisible(next);
+            }}
+          >
+            <Keyboard size={12} />
+          </button>
+          <button
             className="p-1 rounded hover:bg-canvas-border text-canvas-muted"
             title="New terminal"
             onClick={() => {
@@ -930,117 +1070,248 @@ export default function IdeLayout() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-1">
-          {/* GROUPS section — first-class containers (IDE-only state). */}
-          <div>
-            <div className="flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">
-              <span className="flex-1">Groups</span>
-              <span className="opacity-60 mr-1">{ideGroups.length}</span>
-              <button
-                className="p-0.5 rounded hover:bg-canvas-border hover:text-canvas-text"
-                title="New empty group"
-                onClick={() => createIdeGroup([])}
-              >
-                <Plus size={10} />
-              </button>
-            </div>
-            {ideGroups.map((g) => {
-              const isActive = focusedItemId === g.id;
-              const isEditing = editing?.id === g.id && editing.scope === 'sidebar';
+          {/* The sidebar tree is rooted by PTY daemon connection (= agent).
+              Each agent registered in the back is a tree root row. Only the
+              CURRENT agent is expanded and shows the Groups + items-by-type
+              subtree below. Clicking a collapsed agent row switches the
+              active agent (same effect as the Toolbar's agent dropdown) —
+              that one becomes the new expanded root, the previous current
+              collapses. */}
+          {(() => {
+            // Render the subtree (groups + items, optionally type-grouped)
+            // for one agent. Parameterised so we can use it for the current
+            // agent (live store data) AND non-current expanded agents (data
+            // fetched into agentDataCache).
+            //
+            // - `agentItems` / `agentGroups` are the data to render.
+            // - `isCurrent` controls whether interactions go to the live
+            //   store (current) or first switch the current agent.
+            const renderAgentSubtree = (
+              agentId: string,
+              agentItems: CanvasItem[],
+              agentGroups: IdeGroup[],
+              isCurrent: boolean,
+            ): ReactElement => {
+              // Click handler for any item/group row inside this subtree.
+              const handleSelect = (id: string) => {
+                if (isCurrent) {
+                  openIdeTab(id);
+                } else {
+                  // Switch to this agent and queue the click-through. The
+                  // pendingNavigation effect will fire openIdeTab once items
+                  // are loaded for the new current agent. Group ids start
+                  // with `group:` and live in IdePrefs (already loaded by
+                  // setCurrentAgent), but items are async — same path is
+                  // safe for both.
+                  setCurrentAgent(agentId);
+                  setPendingNavigation({ agentId, itemId: id });
+                }
+              };
+
+              // Render mode: type-grouped (default) vs flat list.
+              // groupByType returns a flat single-section when sort != 'type';
+              // we still use it but skip the header in flatMode.
+              const sections = groupByType(agentItems, sort);
+              const showTypeHeaders = !flatMode && sort === 'type';
+              const showGroupsHeader = !flatMode;
+
+              const groupRows = agentGroups.map((g) => {
+                const isFocused = isCurrent && focusedItemId === g.id;
+                const isEditing = isCurrent && editing?.id === g.id && editing.scope === 'sidebar';
+                return (
+                  <div
+                    key={g.id}
+                    role="button"
+                    tabIndex={0}
+                    className={`w-full flex items-center gap-2 pl-5 pr-3 py-1 text-xs text-left transition-colors cursor-pointer ${
+                      isFocused ? 'bg-canvas-accent/20 text-canvas-text' : 'text-canvas-text hover:bg-canvas-border'
+                    }`}
+                    onClick={() => { if (!isEditing) handleSelect(g.id); }}
+                    onContextMenu={(e) => {
+                      if (!isCurrent) return;
+                      e.preventDefault();
+                      setCtxMenu({ x: e.clientX, y: e.clientY, forId: g.id });
+                    }}
+                    title={`${g.name} — ${g.members.length} members`}
+                  >
+                    <LayoutGrid size={12} className="text-canvas-accent shrink-0" />
+                    {isEditing ? (
+                      <InlineRename
+                        initial={g.name}
+                        onCommit={(next) => commitRename(g.id, next)}
+                        onCancel={() => setEditing(null)}
+                        className="text-xs flex-1 min-w-0"
+                      />
+                    ) : (
+                      <>
+                        <span className="truncate flex-1">{g.name}</span>
+                        <span className="text-[9px] opacity-60">{g.members.length}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              });
+
+              const itemRow = (item: CanvasItem) => {
+                const isFocused = isCurrent && focusedItemId === item.id;
+                const isEditing = isCurrent && editing?.id === item.id && editing.scope === 'sidebar';
+                return (
+                  <div
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    className={`w-full flex items-center gap-2 pl-5 pr-3 py-1 text-xs text-left transition-colors cursor-pointer ${
+                      isFocused
+                        ? 'bg-canvas-accent/20 text-canvas-text'
+                        : 'text-canvas-text hover:bg-canvas-border'
+                    }`}
+                    onClick={() => { if (!isEditing) handleSelect(item.id); }}
+                    onContextMenu={(e) => {
+                      if (!isCurrent) return;
+                      e.preventDefault();
+                      setCtxMenu({ x: e.clientX, y: e.clientY, forId: item.id });
+                    }}
+                    title={getCanvasItemTitle(item, { fullPath: true })}
+                  >
+                    <TerminalLeftIcon item={item} />
+                    {isEditing ? (
+                      <InlineRename
+                        initial={getCanvasItemTitle(item)}
+                        onCommit={(next) => commitRename(item.id, next)}
+                        onCancel={() => setEditing(null)}
+                        className="text-xs flex-1 min-w-0"
+                      />
+                    ) : (
+                      <>
+                        <span className="truncate flex-1">{getCanvasItemTitle(item)}</span>
+                        {item.pinned && <span className="text-[9px] text-canvas-accent" title="Pinned">📌</span>}
+                        {item.window?.locked && <span className="text-[9px] text-canvas-muted" title="Locked">🔒</span>}
+                      </>
+                    )}
+                  </div>
+                );
+              };
+
               return (
-                <div
-                  key={g.id}
-                  role="button"
-                  tabIndex={0}
-                  className={`w-full flex items-center gap-2 px-3 py-1 text-xs text-left transition-colors cursor-pointer ${
-                    isActive ? 'bg-canvas-accent/20 text-canvas-text' : 'text-canvas-text hover:bg-canvas-border'
-                  }`}
-                  onClick={() => { if (!isEditing) openIdeTab(g.id); }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setCtxMenu({ x: e.clientX, y: e.clientY, forId: g.id });
-                  }}
-                  title={`${g.name} — ${g.members.length} members`}
-                >
-                  <LayoutGrid size={12} className="text-canvas-accent shrink-0" />
-                  {isEditing ? (
-                    <InlineRename
-                      initial={g.name}
-                      onCommit={(next) => commitRename(g.id, next)}
-                      onCancel={() => setEditing(null)}
-                      className="text-xs flex-1 min-w-0"
-                    />
-                  ) : (
-                    <>
-                      <span className="truncate flex-1">{g.name}</span>
-                      <span className="text-[9px] opacity-60">{g.members.length}</span>
-                    </>
+                <div key={`subtree-${agentId}`}>
+                  {/* Groups */}
+                  {showGroupsHeader && (
+                    <div className="flex items-center gap-1 px-3 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">
+                      <span className="flex-1">Groups</span>
+                      <span className="opacity-60 mr-1">{agentGroups.length}</span>
+                      {isCurrent && (
+                        <button
+                          className="p-0.5 rounded hover:bg-canvas-border hover:text-canvas-text"
+                          title="New empty group"
+                          onClick={() => createIdeGroup([])}
+                        >
+                          <Plus size={10} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {groupRows}
+                  {showGroupsHeader && agentGroups.length === 0 && (
+                    <div className="pl-5 pr-3 py-1 text-[10px] text-canvas-muted italic">No groups</div>
+                  )}
+
+                  {/* Items — type-grouped or flat */}
+                  {sections.map((section) => (
+                    <div key={section.type}>
+                      {showTypeHeaders && (
+                        <button
+                          className="w-full flex items-center gap-1 px-3 py-1 text-[10px] uppercase tracking-wider text-canvas-muted hover:text-canvas-text"
+                          onClick={() => setCollapsed((c) => ({ ...c, [`${agentId}:${section.type}`]: !c[`${agentId}:${section.type}`] }))}
+                        >
+                          {collapsed[`${agentId}:${section.type}`] ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                          <span>{TYPE_LABEL[section.type]}</span>
+                          <span className="ml-1 opacity-60">{section.items.length}</span>
+                        </button>
+                      )}
+                      {(!showTypeHeaders || !collapsed[`${agentId}:${section.type}`]) && section.items.map(itemRow)}
+                    </div>
+                  ))}
+                  {agentItems.length === 0 && (
+                    <div className="px-3 py-2 text-[10px] text-canvas-muted italic">No items.</div>
                   )}
                 </div>
               );
-            })}
-            {ideGroups.length === 0 && (
-              <div className="px-3 py-1 text-[10px] text-canvas-muted italic">No groups</div>
-            )}
-          </div>
+            };
 
-          {itemSections.map((g) => {
-            const isCollapsed = collapsed[g.type];
-            return (
-              <div key={g.type}>
-                {sort === 'type' && (
-                  <button
-                    className="w-full flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted hover:text-canvas-text"
-                    onClick={() => setCollapsed((c) => ({ ...c, [g.type]: !c[g.type] }))}
+            // The agent rows. Each agent is a top-level chevron-row; expanded
+            // agents render their subtree below. Chevron toggles expand only;
+            // clicking the name sets-current AND ensures expanded.
+            const rows: ReactElement[] = [];
+            for (const agent of agents) {
+              const isCurrent = agent.id === currentAgentId;
+              const isExpanded = expandedAgentIds.has(agent.id);
+
+              // Resolve agent-scoped data.
+              let subtreeNode: ReactElement | null = null;
+              if (isExpanded) {
+                if (isCurrent) {
+                  subtreeNode = renderAgentSubtree(agent.id, items, ideGroups, true);
+                } else {
+                  const cached = agentDataCache[agent.id];
+                  if (!cached) {
+                    subtreeNode = (
+                      <div key={`loading-${agent.id}`} className="pl-5 pr-3 py-1 text-[10px] text-canvas-muted italic">Loading…</div>
+                    );
+                  } else if ('error' in cached) {
+                    subtreeNode = (
+                      <div key={`err-${agent.id}`} className="mx-2 my-1 px-2 py-1 text-[10px] text-red-300 bg-red-500/10 rounded">{cached.error}</div>
+                    );
+                  } else {
+                    subtreeNode = renderAgentSubtree(agent.id, cached.items, cached.groups, false);
+                  }
+                }
+              }
+
+              rows.push(
+                <div key={agent.id}>
+                  <div
+                    className={`w-full flex items-center gap-1.5 pl-1.5 pr-2 py-1.5 text-sm font-medium text-left transition-colors border-l-2 ${
+                      isCurrent
+                        ? 'bg-canvas-accent/30 text-canvas-text border-canvas-accent shadow-[inset_0_-1px_0_rgba(255,255,255,0.04)]'
+                        : 'bg-canvas-border/30 text-canvas-text border-transparent hover:bg-canvas-border hover:border-canvas-muted'
+                    }`}
                   >
-                    {isCollapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-                    <span>{TYPE_LABEL[g.type]}</span>
-                    <span className="ml-1 opacity-60">{g.items.length}</span>
-                  </button>
-                )}
-                {!isCollapsed && g.items.map((item) => {
-                  const isActive = focusedItemId === item.id;
-                  const isEditing = editing?.id === item.id && editing.scope === 'sidebar';
-                  return (
-                    <div
-                      key={item.id}
+                    <button
+                      className="p-0.5 rounded text-canvas-muted hover:bg-canvas-border hover:text-canvas-text shrink-0"
+                      onClick={(e) => { e.stopPropagation(); toggleAgentExpanded(agent.id); }}
+                      title={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isExpanded
+                        ? <ChevronDown size={14} />
+                        : <ChevronRight size={14} />}
+                    </button>
+                    <span
                       role="button"
                       tabIndex={0}
-                      className={`w-full flex items-center gap-2 px-3 py-1 text-xs text-left transition-colors cursor-pointer ${
-                        isActive
-                          ? 'bg-canvas-accent/20 text-canvas-text'
-                          : 'text-canvas-text hover:bg-canvas-border'
-                      }`}
-                      onClick={() => { if (!isEditing) openIdeTab(item.id); }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setCtxMenu({ x: e.clientX, y: e.clientY, forId: item.id });
+                      className="truncate flex-1 cursor-pointer"
+                      onClick={() => {
+                        if (!isCurrent) setCurrentAgent(agent.id);
+                        if (!isExpanded) toggleAgentExpanded(agent.id);
                       }}
-                      title={getCanvasItemTitle(item, { fullPath: true })}
+                      title={`${agent.name} — ${agent.ip}\nClick name to make current. Chevron expands without switching.`}
                     >
-                      <TerminalLeftIcon item={item} />
-                      {isEditing ? (
-                        <InlineRename
-                          initial={getCanvasItemTitle(item)}
-                          onCommit={(next) => commitRename(item.id, next)}
-                          onCancel={() => setEditing(null)}
-                          className="text-xs flex-1 min-w-0"
-                        />
-                      ) : (
-                        <>
-                          <span className="truncate flex-1">{getCanvasItemTitle(item)}</span>
-                          {item.pinned && <span className="text-[9px] text-canvas-accent" title="Pinned">📌</span>}
-                          {item.window?.locked && <span className="text-[9px] text-canvas-muted" title="Locked">🔒</span>}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-          {itemSections.length === 0 && (
-            <div className="px-3 py-4 text-xs text-canvas-muted">No items on this canvas yet.</div>
-          )}
+                      {agent.name}
+                    </span>
+                    {isCurrent && <span className="text-[10px] text-canvas-accent shrink-0" title="Current connection">●</span>}
+                  </div>
+                  {subtreeNode}
+                </div>,
+              );
+            }
+            if (agents.length === 0) {
+              rows.push(
+                <div key="__no-agents__" className="px-3 py-3 text-xs text-canvas-muted">
+                  No PTY daemon connections. Add one in Settings.
+                </div>,
+              );
+            }
+            return rows;
+          })()}
         </div>
       </div>
 
@@ -1244,6 +1515,7 @@ export default function IdeLayout() {
         }}
         onClose={() => setKillCandidate(null)}
       />
+
 
       {/* Right-click context menu — items vary based on whether the target is
           a group or a canvas item. Closes via ContextMenu's own outside-click. */}

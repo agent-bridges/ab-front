@@ -24,9 +24,9 @@ export default function DialogShell({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100100] flex items-center justify-center bg-black/50 px-4" data-canvas-interactive="true">
-      <div className={`w-full ${widthClassName} rounded-xl border border-canvas-border bg-canvas-surface shadow-2xl`}>
-        <div className="flex items-center justify-between gap-3 border-b border-canvas-border px-5 py-4">
+    <div className="fixed inset-0 z-[100100] flex items-center justify-center bg-black/50 px-4 py-6" data-canvas-interactive="true">
+      <div className={`w-full ${widthClassName} flex flex-col max-h-[calc(100vh-3rem)] rounded-xl border border-canvas-border bg-canvas-surface shadow-2xl`}>
+        <div className="shrink-0 flex items-center justify-between gap-3 border-b border-canvas-border px-5 py-4">
           <div>
             <div className="text-base font-semibold text-canvas-text">{title}</div>
             {description && <div className="text-xs text-canvas-muted">{description}</div>}
@@ -38,8 +38,9 @@ export default function DialogShell({
             Close
           </button>
         </div>
-        <div className={`px-5 py-4 ${bodyClassName}`.trim()}>{children}</div>
-        {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-canvas-border px-5 py-4">{footer}</div>}
+        {/* Body: only this section scrolls; header + footer stay pinned. */}
+        <div className={`flex-1 min-h-0 overflow-y-auto px-5 py-4 ${bodyClassName}`.trim()}>{children}</div>
+        {footer && <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-canvas-border px-5 py-4">{footer}</div>}
       </div>
     </div>
   );

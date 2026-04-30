@@ -101,6 +101,7 @@ const DEFAULT_WINDOW_SIZES: Record<CanvasItemType, { w: number; h: number }> = {
   filebrowser: { w: 500, h: 500 },
   notes: { w: 450, h: 400 },
   anchor: { w: 320, h: 240 },
+  tunnels: { w: 720, h: 360 },
 };
 
 function getMinimapStorageKey(agentId?: string | null) {
@@ -859,12 +860,28 @@ export const useCanvasStore = create<CanvasState>()(
     },
 
     addItem: (type, x, y, extra) => {
+      // Singleton types: at most one instance per board. If one already
+      // exists, focus it (open its window) instead of creating a duplicate.
+      if (type === 'tunnels') {
+        const existing = get().items.find((i) => i.type === 'tunnels');
+        if (existing) {
+          set((s) => ({
+            items: s.items.map((i) =>
+              i.id === existing.id
+                ? { ...i, window: { ...(i.window ?? { x: i.x, y: i.y, w: 480, h: 360, zIndex: 0, isMinimized: false }), isOpen: true, isMinimized: false } }
+                : i,
+            ),
+          }));
+          return existing.id;
+        }
+      }
       const id = `item-${nextId++}`;
       const labels: Record<CanvasItemType, string> = {
         terminal: 'Terminal',
         filebrowser: 'Files',
         notes: 'Notes',
         anchor: 'Anchor',
+        tunnels: 'Tunnels',
       };
       const item: CanvasItem = {
         id,

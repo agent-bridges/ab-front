@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Wrench, User } from 'lucide-react';
 import { authFetch } from '../api/client';
+import TouchKeysPanel from './keyboard/TouchKeysPanel';
 
 const FONT_SIZE_KEY = 'ab-terminal-font-size';
 const SCROLL_SPEED_KEY = 'ab-touch-scroll-speed';
@@ -112,6 +113,12 @@ export function MobileVisualPanel({ open, onClose }: { open: boolean; onClose: (
               />
               <div className="w-8 h-6 flex items-center justify-center rounded border border-canvas-border text-[11px] text-canvas-text bg-canvas-bg">{iconsPerRow}</div>
             </div>
+          </div>
+
+          {/* Touch-keyboard customization — same controls as the desktop
+              SettingsModal Visual tab, sourced from the shared component. */}
+          <div className="pt-3 border-t border-canvas-border">
+            <TouchKeysPanel />
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-export type CanvasItemType = 'terminal' | 'filebrowser' | 'notes' | 'anchor';
+export type CanvasItemType = 'terminal' | 'filebrowser' | 'notes' | 'anchor' | 'tunnels';
 
 /**
  * Desktop render mode. Mobile always renders the icon-grid + tab manager;

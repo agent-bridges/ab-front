@@ -1,14 +1,15 @@
-import { Terminal, FolderOpen, StickyNote, MapPin } from 'lucide-react';
+import { Terminal, FolderOpen, StickyNote, MapPin, Cable } from 'lucide-react';
 import { getTerminalStatusMeta, PROCESS_STATUS_THEME, type ProcessStatus, type AiAgent } from './ProcessIndicator';
 import ClaudeIcon from './icons/ClaudeIcon';
 import CodexIcon from './icons/CodexIcon';
-import type { CanvasItem } from '../types';
+import type { CanvasItem, CanvasItemType } from '../types';
 
-const ICONS = {
+const ICONS: Record<CanvasItemType, typeof Terminal> = {
   terminal: Terminal,
   filebrowser: FolderOpen,
   notes: StickyNote,
   anchor: MapPin,
+  tunnels: Cable,
 };
 
 function AiIcon({ agent, status, size }: { agent: AiAgent; status: ProcessStatus; size: number }) {

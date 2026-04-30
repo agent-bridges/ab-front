@@ -16,6 +16,11 @@ export async function fetchCanvasItems(agentId?: string | null): Promise<CanvasI
   if (!agentId) return [];
   const query = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
   const resp = await authFetch(`/api/canvas${query}`);
+  // Legacy daemons (nag-go-pty 1.5.x) don't have /api/board/items at all —
+  // the back transparently proxies the upstream 404. Treat 404 as "no canvas
+  // support on this daemon" rather than a hard error so old agents render as
+  // an empty subtree in the multi-agent IDE sidebar instead of a red banner.
+  if (resp.status === 404) return [];
   const items = await readJsonOrThrow<CanvasItem[]>(resp, 'Failed to fetch canvas items');
   // Merge per-device presentation state from localStorage.
   // Board item data itself (x/y/label/content/path) comes from daemon.
