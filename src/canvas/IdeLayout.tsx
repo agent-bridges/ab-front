@@ -1116,6 +1116,10 @@ export default function IdeLayout() {
               const showGroupsHeader = !flatMode;
 
               const groupRows = agentGroups.map((g) => {
+                // Подсветка фокуса работает в том суб-дереве, где живёт фокус.
+                // Сейчас фокус хранится только для current agent'а, так что
+                // эффективно подсвечивается строка в его субдереве. Если
+                // потом сделаем cross-agent tabs — расширим focusedItem-shape.
                 const isFocused = isCurrent && focusedItemId === g.id;
                 const isEditing = isCurrent && editing?.id === g.id && editing.scope === 'sidebar';
                 return (
@@ -1124,7 +1128,7 @@ export default function IdeLayout() {
                     role="button"
                     tabIndex={0}
                     className={`w-full flex items-center gap-2 pl-5 pr-3 py-1 text-xs text-left transition-colors cursor-pointer ${
-                      isFocused ? 'bg-canvas-accent/20 text-canvas-text' : 'text-canvas-text hover:bg-canvas-border'
+                      isFocused ? 'bg-white/10 text-canvas-text' : 'text-canvas-text hover:bg-canvas-border'
                     }`}
                     onClick={() => { if (!isEditing) handleSelect(g.id); }}
                     onContextMenu={(e) => {
@@ -1162,7 +1166,7 @@ export default function IdeLayout() {
                     tabIndex={0}
                     className={`w-full flex items-center gap-2 pl-5 pr-3 py-1 text-xs text-left transition-colors cursor-pointer ${
                       isFocused
-                        ? 'bg-canvas-accent/20 text-canvas-text'
+                        ? 'bg-white/10 text-canvas-text'
                         : 'text-canvas-text hover:bg-canvas-border'
                     }`}
                     onClick={() => { if (!isEditing) handleSelect(item.id); }}

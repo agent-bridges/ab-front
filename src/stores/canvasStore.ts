@@ -918,11 +918,33 @@ export const useCanvasStore = create<CanvasState>()(
         }
       }
 
+      // Clean up any group memberships that referenced this id. Otherwise
+      // the deleted id stays as a stale reference in `group.members`, which
+      // makes the IDE tab badge show inflated counts (e.g. "×7" when only
+      // 1 tile actually renders) and the GroupView paddings drift.
+      const stateNow = get();
+      const cleanedGroups = stateNow.ideGroups.map((g) => {
+        if (!g.members.includes(id)) return g;
+        const members = g.members.filter((m) => m !== id);
+        const layout: IdeGroupLayout = members.length === 2 ? 'v2'
+          : members.length === 3 ? 'v3'
+          : members.length >= 4 ? 'grid'
+          : 'single';
+        const sizes = buildDefaultSizes(layout, members.length);
+        return { ...g, members, layout, sizes };
+      });
+      const groupsChanged = cleanedGroups !== stateNow.ideGroups
+        && cleanedGroups.some((g, i) => g !== stateNow.ideGroups[i]);
+
       set((s) => ({
         items: s.items.filter((i) => i.id !== id),
         selectedItemIds: s.selectedItemIds.filter((selectedId) => selectedId !== id),
         focusedAnchorId: s.focusedAnchorId === id ? null : s.focusedAnchorId,
+        ...(groupsChanged ? { ideGroups: cleanedGroups } : {}),
       }));
+      if (groupsChanged) {
+        saveIdePrefs(stateNow.boardAgentId, { groups: cleanedGroups });
+      }
     },
 
     moveItem: (id, x, y) => {
