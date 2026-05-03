@@ -22,6 +22,7 @@ import {
   Eye,
   Pencil,
   Keyboard,
+  Layers,
 } from 'lucide-react';
 import { useCanvasStore } from '../stores/canvasStore';
 import TerminalView from '../components/terminal/TerminalView';
@@ -1067,6 +1068,13 @@ export default function IdeLayout() {
           >
             <Plus size={12} />
           </button>
+          <button
+            className="p-1 rounded hover:bg-canvas-border text-canvas-muted"
+            title="New group (empty)"
+            onClick={() => createIdeGroup([])}
+          >
+            <Layers size={12} />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-1">
@@ -1111,9 +1119,12 @@ export default function IdeLayout() {
               // Render mode: type-grouped (default) vs flat list.
               // groupByType returns a flat single-section when sort != 'type';
               // we still use it but skip the header in flatMode.
+              // Groups header is independent — flatMode controls TYPE-grouping
+              // (Terminals/Files/Notes sections), not user-curated groups,
+              // which are first-class regardless of display mode.
               const sections = groupByType(agentItems, sort);
               const showTypeHeaders = !flatMode && sort === 'type';
-              const showGroupsHeader = !flatMode;
+              const showGroupsHeader = true;
 
               const groupRows = agentGroups.map((g) => {
                 // Подсветка фокуса работает в том суб-дереве, где живёт фокус.

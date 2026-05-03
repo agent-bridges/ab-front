@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ZoomIn, ZoomOut, Maximize, Terminal,
   Columns3, Rows3, LayoutGrid, Menu, X, AppWindow, XSquare, LogOut, Minus, Map, MapPin,
-  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User, Columns2, Keyboard,
+  Save, Download, Trash2, Settings2, Search, GripVertical, Wrench, User, Lock, Columns2, Keyboard,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useCanvasStore } from '../stores/canvasStore';
@@ -18,7 +18,7 @@ import { getViewportSpawnPosition } from '../utils/canvasViewport';
 import { CREATE_ITEMS, createCanvasItemAtPosition } from './createItems';
 import ConnectionSettingsModal from './ConnectionSettingsModal';
 import MobileConnectionPanel from './MobileConnectionPanel';
-import { MobileVisualPanel, MobileAccountPanel } from './MobileSettingsPanel';
+import { MobileVisualPanel, MobileAccountPanel, MobileAuthPanel } from './MobileSettingsPanel';
 import SettingsModal from './SettingsModal';
 
 const APP_VERSION = '0.1.0';
@@ -85,6 +85,7 @@ export default function Toolbar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  const [authSettingsOpen, setAuthSettingsOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(false);
@@ -436,6 +437,13 @@ export default function Toolbar() {
                 >
                   <User size={18} className="text-canvas-accent" />
                 </button>
+                <button
+                  onClick={() => { setAuthSettingsOpen(true); setMenuOpen(false); }}
+                  className="w-10 h-10 flex items-center justify-center hover:bg-canvas-border rounded"
+                  title="Authentication (client cert / mTLS)"
+                >
+                  <Lock size={18} className="text-canvas-accent" />
+                </button>
               </div>
 
               <div className="h-px bg-canvas-border my-1" />
@@ -478,6 +486,7 @@ export default function Toolbar() {
       <MobileConnectionPanel open={connectionSettingsOpen} onClose={() => setConnectionSettingsOpen(false)} />
       <MobileVisualPanel open={visualSettingsOpen} onClose={() => setVisualSettingsOpen(false)} />
       <MobileAccountPanel open={accountSettingsOpen} onClose={() => setAccountSettingsOpen(false)} />
+      <MobileAuthPanel open={authSettingsOpen} onClose={() => setAuthSettingsOpen(false)} />
       {logoutConfirmOpen && <LogoutDialog onConfirm={confirmLogout} onCancel={() => setLogoutConfirmOpen(false)} />}
       </>
     );

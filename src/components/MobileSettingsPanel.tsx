@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Wrench, User } from 'lucide-react';
+import { X, Wrench, User, Lock } from 'lucide-react';
 import { authFetch } from '../api/client';
 import TouchKeysPanel from './keyboard/TouchKeysPanel';
+import ClientCertSettings from './ClientCertSettings';
 
 const FONT_SIZE_KEY = 'ab-terminal-font-size';
 const SCROLL_SPEED_KEY = 'ab-touch-scroll-speed';
@@ -201,6 +202,32 @@ export function MobileAccountPanel({ open, onClose }: { open: boolean; onClose: 
           >
             {saving ? 'Saving...' : 'Change Password'}
           </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// --- Auth Panel (mTLS / client cert) ---
+// Mirrors MobileVisualPanel / MobileAccountPanel structure; body is the
+// shared ClientCertSettings component used by the desktop SettingsModal too.
+export function MobileAuthPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-[90]" onClick={onClose} />
+      <div className="fixed top-0 right-0 bottom-0 w-[300px] bg-canvas-surface border-l border-canvas-border z-[91] flex flex-col">
+        <div className="flex items-center justify-between p-3 border-b border-canvas-border">
+          <div className="flex items-center gap-2">
+            <Lock size={16} className="text-canvas-accent" />
+            <span className="text-sm font-semibold text-canvas-text">Authentication</span>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-canvas-border rounded">
+            <X size={16} className="text-canvas-muted" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <ClientCertSettings />
         </div>
       </div>
     </>

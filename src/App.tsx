@@ -130,10 +130,22 @@ export default function App() {
     conn.setOnSessions((sessions) => {
       syncTerminals(sessions, currentAgentId);
     });
+    // Daemon broadcasts when board_items mutates (e.g. peer agent runs
+    // `ab notes create`). Debounce a burst of CLI ops into one re-fetch.
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    conn.setOnBoardItemsChanged(() => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        loadItems(currentAgentId);
+      }, 250);
+    });
     conn.connect();
 
-    return () => conn.destroy();
-  }, [boardRefreshToken, currentAgentId, syncTerminals]);
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      conn.destroy();
+    };
+  }, [boardRefreshToken, currentAgentId, syncTerminals, loadItems]);
 
   if (!authChecked) return null;
   if (needsAuth) {

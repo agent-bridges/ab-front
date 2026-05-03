@@ -3,6 +3,7 @@ import { createPtyStateWebSocket, startPing } from './wsUtils';
 
 type OnSessionsCallback = (sessions: PtySession[]) => void;
 type OnConnectedCallback = (connected: boolean) => void;
+type OnBoardItemsChangedCallback = () => void;
 
 /**
  * WebSocket connection for receiving PTY session state updates for an agent.
@@ -15,6 +16,7 @@ export class PtyStateConnection {
 
   private onSessions: OnSessionsCallback | null = null;
   private onConnected: OnConnectedCallback | null = null;
+  private onBoardItemsChanged: OnBoardItemsChangedCallback | null = null;
 
   constructor(agentId: string) {
     this.agentId = agentId;
@@ -22,6 +24,7 @@ export class PtyStateConnection {
 
   setOnSessions(cb: OnSessionsCallback) { this.onSessions = cb; }
   setOnConnected(cb: OnConnectedCallback) { this.onConnected = cb; }
+  setOnBoardItemsChanged(cb: OnBoardItemsChangedCallback) { this.onBoardItemsChanged = cb; }
 
   connect() {
     this.close();
@@ -42,6 +45,8 @@ export class PtyStateConnection {
       const msg = JSON.parse(event.data);
       if (msg.type === 'pty_state') {
         this.onSessions?.(msg.sessions);
+      } else if (msg.type === 'board_items_changed') {
+        this.onBoardItemsChanged?.();
       }
     };
 
@@ -80,5 +85,6 @@ export class PtyStateConnection {
     this.close();
     this.onSessions = null;
     this.onConnected = null;
+    this.onBoardItemsChanged = null;
   }
 }
