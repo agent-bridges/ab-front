@@ -401,14 +401,18 @@ function Tile({
       onDrop={handleDrop}
     >
       <div
-        className={`flex items-center gap-1 shrink-0 px-2 py-1 border-b border-canvas-border bg-canvas-surface ${dndEnabled ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        className={`flex items-center gap-1 shrink-0 px-2 py-1 border-b ${
+          isActive
+            ? 'bg-canvas-accent/15 border-canvas-accent/40'
+            : 'bg-canvas-surface border-canvas-border'
+        } ${dndEnabled ? 'cursor-grab active:cursor-grabbing' : ''}`}
         draggable={dndEnabled}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         title={dndEnabled ? 'Drag to swap with another tile in this group' : undefined}
       >
         <TerminalLeftIcon item={item} />
-        <span className="flex-1 truncate text-[10px] text-canvas-muted">
+        <span className={`flex-1 truncate text-[10px] ${isActive ? 'text-canvas-accent font-medium' : 'text-canvas-muted'}`}>
           {getCanvasItemTitle(item, { fullPath: true })}
         </span>
         {item.type === 'terminal' && item.ptyId && (
