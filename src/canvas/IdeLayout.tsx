@@ -1119,12 +1119,13 @@ export default function IdeLayout() {
               // Render mode: type-grouped (default) vs flat list.
               // groupByType returns a flat single-section when sort != 'type';
               // we still use it but skip the header in flatMode.
-              // Groups header is independent — flatMode controls TYPE-grouping
-              // (Terminals/Files/Notes sections), not user-curated groups,
-              // which are first-class regardless of display mode.
+              // Groups header follows the same rule — flat mode means NO
+              // section headers (including Groups), just rows. The "create
+              // group" affordance lives in the top-controls bar instead, so
+              // it's reachable in every mode.
               const sections = groupByType(agentItems, sort);
               const showTypeHeaders = !flatMode && sort === 'type';
-              const showGroupsHeader = true;
+              const showGroupsHeader = !flatMode;
 
               const groupRows = agentGroups.map((g) => {
                 // Подсветка фокуса работает в том суб-дереве, где живёт фокус.
