@@ -806,13 +806,20 @@ export const useCanvasStore = create<CanvasState>()(
       // Keep non-terminal items as-is.
       // For terminals: keep only those that have a live session.
       const kept: CanvasItem[] = [];
+      const droppedIds = new Set<string>();
       for (const item of currentItems) {
         if (item.type !== 'terminal' || !item.ptyId) {
           kept.push(item);
           continue;
         }
         const session = sessionMap.get(item.ptyId);
-        if (!session) continue; // dead terminal — drop it
+        if (!session) {
+          // dead terminal — drop it; remember the id so we can also prune
+          // it from any ideGroups it was a member of (otherwise the group
+          // count and tile-area header drift apart from the actual render).
+          droppedIds.add(item.id);
+          continue;
+        }
         sessionMap.delete(item.ptyId);
         kept.push({
           ...item,
@@ -854,9 +861,33 @@ export const useCanvasStore = create<CanvasState>()(
         debouncedSave(kept[kept.length - 1]);
       }
 
+      // Mirror the orphan-prune we do in removeItem: when terminals get
+      // killed externally (e.g. via `ab sessions kill` from another session),
+      // the ids leave items[] but stay in ideGroups[].members[] otherwise,
+      // making the group's count and tile-area "(N)" header diverge from
+      // what's actually rendered. Strip dead ids and rebuild the group's
+      // layout/sizes in the same pass.
+      const stateNow = get();
+      let cleanedGroups = stateNow.ideGroups;
+      let groupsChanged = false;
+      if (droppedIds.size > 0) {
+        cleanedGroups = stateNow.ideGroups.map((g) => {
+          if (!g.members.some((m) => droppedIds.has(m))) return g;
+          const members = g.members.filter((m) => !droppedIds.has(m));
+          const layout: IdeGroupLayout = members.length === 2 ? 'v2'
+            : members.length === 3 ? 'v3'
+            : members.length >= 4 ? 'grid'
+            : 'single';
+          const sizes = buildDefaultSizes(layout, members.length);
+          return { ...g, members, layout, sizes };
+        });
+        groupsChanged = cleanedGroups.some((g, i) => g !== stateNow.ideGroups[i]);
+      }
+
       // Full replacement of items + cache
       saveBoardRuntimeSnapshot(agentId, kept);
-      set({ items: kept });
+      set(groupsChanged ? { items: kept, ideGroups: cleanedGroups } : { items: kept });
+      if (groupsChanged) saveIdePrefs(agentId, { groups: cleanedGroups });
     },
 
     addItem: (type, x, y, extra) => {
