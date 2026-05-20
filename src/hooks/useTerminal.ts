@@ -172,6 +172,54 @@ export function useTerminal(
     term.unicode.activeVersion = '11';
     term.open(container);
 
+    // --- Clipboard wiring ---
+    // xterm.js ships ZERO clipboard handling by default. Two paths need to
+    // work for users to actually copy text out of a session:
+    //
+    //  1. OSC 52 (the terminal-protocol clipboard write). Claude Code v2.1+
+    //     emits ESC ] 52 ; c ; <base64> BEL when it copies selected text,
+    //     and prints "sent N chars via OSC 52 · check terminal clipboard
+    //     settings if paste fails". Without a handler the escape is dropped
+    //     silently. We decode the base64 and forward to the browser
+    //     clipboard. Sequence `52;c;?` is a read-request — ignore (we don't
+    //     leak the user's clipboard back into the PTY).
+    //
+    //  2. Mouse-select + Ctrl+C / Cmd+C. Native browser copy doesn't fire
+    //     because the terminal renders in a canvas (no real DOM selection).
+    //     Intercept the key combo, grab `term.getSelection()`, and push it
+    //     to the clipboard ourselves.
+    const writeClipboard = (text: string) => {
+      try { void navigator.clipboard?.writeText(text); } catch { /* noop */ }
+    };
+    term.parser.registerOscHandler(52, (data) => {
+      // Payload format: "<targets>;<base64>". <targets> is one or more
+      // selection letters (c=clipboard, p=primary, …); we treat all of them
+      // as system-clipboard writes. "?" as the second field is a READ
+      // request from the PTY — refuse it.
+      const sep = data.indexOf(';');
+      if (sep < 0) return true;
+      const payload = data.slice(sep + 1);
+      if (payload === '?') return true; // never expose clipboard back to the PTY
+      try {
+        const text = typeof atob === 'function' ? atob(payload) : '';
+        if (text) writeClipboard(text);
+      } catch { /* malformed base64 — drop */ }
+      return true;
+    });
+    term.attachCustomKeyEventHandler((e) => {
+      // Only intercept on the keydown of Ctrl/Cmd+C, and only when there's
+      // an active selection. If nothing's selected we let the key through
+      // so it still works as SIGINT for the shell/agent.
+      if (e.type !== 'keydown') return true;
+      const isCopyCombo = (e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && !e.shiftKey && !e.altKey;
+      if (!isCopyCombo) return true;
+      const sel = term.getSelection();
+      if (!sel) return true;
+      writeClipboard(sel);
+      e.preventDefault();
+      return false;
+    });
+
     const connection = new PtyConnection(agentId, ptyId);
 
     connection.setOnData((data) => {
