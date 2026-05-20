@@ -69,7 +69,15 @@ function stripTerminalRecoveryNoise(data: string) {
   return data
     .replace(/\x1bP.*?\x1b\\/gs, '')
     .replace(/\x1b\[\?[\d;]*\$y/g, '')
-    .replace(/\?[\d;]*\$y/g, '');
+    .replace(/\?[\d;]*\$y/g, '')
+    // Claude Code v2.1+ prints a status-line hint after writing OSC 52 to
+    // the clipboard: "sent N chars via OSC 52 · check terminal clipboard
+    // settings if paste fails". The OSC sequence itself is intercepted by
+    // our registerOscHandler(52, …) — this regex drops the cosmetic line
+    // so it doesn't clutter the visible terminal output. Match localised
+    // variants where the prefix word might differ but the structure is
+    // stable (the "OSC 52" token is unique enough on its own).
+    .replace(/sent \d+ chars? via OSC 52[^\n\r]*/g, '');
 }
 
 const FULLSCREEN_TUI_COMMANDS = new Set([
@@ -172,6 +180,27 @@ export function useTerminal(
     term.unicode.activeVersion = '11';
     term.open(container);
 
+    // --- Right-click → copy xterm selection ---
+    // Earlier we tried stopping mouse events at the container so the
+    // browser would render its own selection + native context menu. That
+    // doesn't work in practice: xterm.js sets `user-select: none` on every
+    // line, so even when a contextmenu opens it has no DOM selection to
+    // "Copy" from — the menu item is grey/missing. And stopping the events
+    // also broke xterm's OWN selection mechanism (no visible highlight).
+    //
+    // What actually works: let xterm form its selection like normal (the
+    // user drag-selects, xterm highlights). On right-click we do the copy
+    // ourselves from `term.getSelection()` and let the browser menu show
+    // as usual (so middle-click paste / inspect-element / etc still work).
+    // contextmenu IS a user-gesture context, so even `navigator.clipboard`
+    // works here — but we go through fallbackCopy() for max compatibility.
+    const onContextMenu = (_e: MouseEvent) => {
+      const sel = term.getSelection();
+      if (sel) fallbackCopy(sel);
+      // do NOT preventDefault — let the browser menu show.
+    };
+    container.addEventListener('contextmenu', onContextMenu);
+
     // --- Clipboard wiring ---
     // xterm.js ships ZERO clipboard handling by default. Two paths need to
     // work for users to actually copy text out of a session:
@@ -188,9 +217,41 @@ export function useTerminal(
     //     because the terminal renders in a canvas (no real DOM selection).
     //     Intercept the key combo, grab `term.getSelection()`, and push it
     //     to the clipboard ourselves.
+    // Two-layer clipboard write: try the modern async API first (works when
+    // the call is in a user-gesture context, e.g. our Ctrl+C handler), then
+    // fall back to the synchronous `document.execCommand("copy")` via a
+    // hidden textarea — works in more contexts including async-from-PTY
+    // OSC 52 writes that the browser would otherwise reject without a
+    // recent user gesture.
     const writeClipboard = (text: string) => {
-      try { void navigator.clipboard?.writeText(text); } catch { /* noop */ }
+      try {
+        const p = navigator.clipboard?.writeText(text);
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => fallbackCopy(text));
+        }
+      } catch { fallbackCopy(text); }
     };
+    const fallbackCopy = (text: string) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        ta.style.pointerEvents = 'none';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch { /* nothing else we can do */ }
+    };
+
+    // De-dup: claude-code re-emits OSC 52 on EVERY render during streaming
+    // (upstream issue #41954), which floods clipboard managers with partial
+    // text fragments. Cache the last payload so we only call writeClipboard
+    // when the text actually changes.
+    let lastOsc52Payload = '';
+
     term.parser.registerOscHandler(52, (data) => {
       // Payload format: "<targets>;<base64>". <targets> is one or more
       // selection letters (c=clipboard, p=primary, …); we treat all of them
@@ -200,8 +261,18 @@ export function useTerminal(
       if (sep < 0) return true;
       const payload = data.slice(sep + 1);
       if (payload === '?') return true; // never expose clipboard back to the PTY
+      if (payload === lastOsc52Payload) return true; // dedupe streaming-render spam
+      lastOsc52Payload = payload;
       try {
-        const text = typeof atob === 'function' ? atob(payload) : '';
+        // Proper UTF-8 decode: atob() returns a byte-per-char string (each
+        // char is a Latin-1 byte). We rebuild the byte array and pass it
+        // through TextDecoder so multi-byte sequences (Cyrillic, CJK, …)
+        // come out correctly instead of as mojibake.
+        const binary = typeof atob === 'function' ? atob(payload) : '';
+        if (!binary) return true;
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
         if (text) writeClipboard(text);
       } catch { /* malformed base64 — drop */ }
       return true;
@@ -439,6 +510,9 @@ export function useTerminal(
         resizeDebounce.current = null;
       }
       document.removeEventListener('paste', handlePaste, true);
+      // Hidden state, but the container DOM stays in the cache; if we ever
+      // disposed it for real we'd need to drop these listeners too. For
+      // now removing them is a no-op (container is reused on remount).
       if (activeCached.current) {
         activeCached.current.container.style.display = 'none';
       }
