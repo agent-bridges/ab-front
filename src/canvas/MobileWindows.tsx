@@ -4,6 +4,7 @@ import { useCanvasStore } from '../stores/canvasStore';
 import TerminalView from '../components/terminal/TerminalView';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
+import TunnelsView from '../components/tunnels/TunnelsView';
 import { getCanvasItemTitle } from '../utils/canvasItemTitle';
 import type { CanvasItem, CanvasItemType } from '../types';
 import { useNoteViewMode } from '../hooks/useNoteViewMode';
@@ -101,6 +102,7 @@ export default function MobileWindows() {
             {activeItem.type === 'terminal' && <TerminalView item={activeItem} />}
             {activeItem.type === 'filebrowser' && <FileBrowserView item={activeItem} />}
             {activeItem.type === 'notes' && <NotesEditor item={activeItem} mode={noteMode} />}
+            {activeItem.type === 'tunnels' && <TunnelsView item={activeItem} />}
           </div>
         </div>
       )}

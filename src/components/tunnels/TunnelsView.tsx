@@ -124,15 +124,35 @@ export default function TunnelsView({ item }: { item: CanvasItem }) {
                   <td className="px-3 py-1.5 font-mono">:{t.src_port}</td>
                   <td className="px-3 py-1.5 font-mono">:{t.dst_port}</td>
                   <td className="px-3 py-1.5">
-                    <a
-                      href={t.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-canvas-accent hover:underline"
-                    >
-                      {t.url}
-                      <ExternalLink size={10} />
-                    </a>
+                    {/* Build the links from dst_port + the canonical remote
+                        host ourselves: t.url from `tu ls` can come back as "?"
+                        if the parse hiccups, and the link must ALWAYS point at
+                        the public address:public_port. Show both an http and
+                        an https variant — the tunnelled service may speak
+                        either; the user clicks whichever applies. Each opens
+                        in a new tab. */}
+                    {(() => {
+                      const host = `209.250.240.193:${t.dst_port}`;
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          {(['http', 'https'] as const).map((scheme) => {
+                            const url = `${scheme}://${host}`;
+                            return (
+                              <a
+                                key={scheme}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-canvas-accent hover:underline"
+                              >
+                                {url}
+                                <ExternalLink size={10} />
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-1.5">{t.status}</td>
                   <td className="px-3 py-1.5">
