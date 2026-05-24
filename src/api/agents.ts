@@ -61,7 +61,11 @@ export async function deleteAgent(agentId: string): Promise<{ ok: boolean }> {
 }
 
 function splitDaemonAddress(address: string): { ip: string; port: number } {
-  const value = address.trim();
+  // Strip scheme (http://, https://) + any trailing path before parsing —
+  // otherwise the full URL ends up in the `ip` field and the back builds a
+  // doubled-up `http://http://host:port:port/health` probe URL that always
+  // fails with Connection refused.
+  const value = address.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
   const bracketed = value.match(/^\[(.+)\]:(\d+)$/);
   if (bracketed) {
     return { ip: bracketed[1], port: Number(bracketed[2]) || 8421 };
