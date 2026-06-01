@@ -498,13 +498,18 @@ function normalizeLegacyAutoLabel(item: CanvasItem): CanvasItem {
 }
 
 function getTerminalAutoBase(session: PtySession): string {
-  // An explicit user label (set via `ab sessions meta --label …` or the UI
-  // rename flow) always wins — the user picked this name on purpose.
+  // Daemon is the source of truth for the session's display name. Priority:
+  //   1. session.name — canonical, mutable, always set (auto `<folder>-<uid>`
+  //      at create, mutable via `ab sessions meta --name X`). Per-session
+  //      uniqueness enforced by daemon.
+  //   2. session.label — legacy metadata, kept for back-compat with sessions
+  //      and CLI scripts that still call `meta --label`.
+  //   3. cwd / project_name fallbacks.
+  if (session.name) return session.name;
   if (session.label) return session.label;
   const cwd = session.last_cwd || session.project_path || '';
   if (cwd) return getPathLeafForTitle(cwd);
   if (session.project_name) return session.project_name;
-  if (session.name) return session.name;
   return 'Terminal';
 }
 
@@ -814,9 +819,15 @@ export const useCanvasStore = create<CanvasState>()(
         const session = sessionMap.get(item.ptyId);
         if (!session) continue; // dead terminal — drop it; ideGroups prune below catches stale members.
         sessionMap.delete(item.ptyId);
+        // Daemon is source of truth for the display name (memory rule:
+        // canvas-component state lives on the daemon, client only stores
+        // visual/presentational state). ALWAYS regenerate from the live
+        // session, even if the local item.label looks user-set — the UI
+        // rename flow now writes back to the daemon's name field before this
+        // resync sees it, so the daemon's value is the freshest record.
         kept.push({
           ...item,
-          label: isAutoLabel(item.label) ? makeAutoLabel('terminal', getTerminalAutoBase(session)) : item.label,
+          label: makeAutoLabel('terminal', getTerminalAutoBase(session)),
           currentPath: session.last_cwd || session.project_path || item.currentPath,
           ptyProcesses: session.processes || [],
           ptyAlive: session.alive,
@@ -1039,8 +1050,13 @@ export const useCanvasStore = create<CanvasState>()(
         typeof patch.label === 'string' &&
         patch.label !== currentItem.label
       ) {
-        updatePtyMeta(currentItem.agentId, currentItem.ptyId, { label: patch.label }).catch((e) =>
-          console.error('Failed to update PTY label:', e),
+        // UI rename writes to BOTH name (the new canonical) and label
+        // (legacy fallback so older daemons still receive the update).
+        // The daemon rejects with 409 if the name collides with another
+        // alive session; we log and let next sync revert the local item to
+        // the daemon's value so the UI doesn't show a phantom rename.
+        updatePtyMeta(currentItem.agentId, currentItem.ptyId, { name: patch.label, label: patch.label }).catch((e) =>
+          console.error('Failed to update PTY name/label:', e),
         );
       }
 
