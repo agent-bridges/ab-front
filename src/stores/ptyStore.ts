@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { PtySession } from '../types';
-import { updatePtyMeta } from '../api/pty';
+import { renamePty } from '../api/pty';
 
 interface PtyState {
   agentId: string | null;
@@ -47,7 +47,7 @@ export const usePtyStore = create<PtyState>((set) => ({
     });
 
     try {
-      await updatePtyMeta(agentId, sessionId, { name });
+      await renamePty(agentId, sessionId, name);
     } catch (error) {
       set((current) => {
         if (current.sessionsById[sessionId]?.name !== name) return current;
