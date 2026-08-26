@@ -6,7 +6,7 @@ import DialogShell from '../dialogs/DialogShell';
 import ConfirmDialog from '../dialogs/ConfirmDialog';
 
 /**
- * Singleton canvas view — GUI for the host-side `tu` SSH-tunnel script.
+ * Singleton workspace view — GUI for the host-side `tu` SSH-tunnel script.
  * Reads from /api/agents/{id}/tunnels (proxied by ab-back to ab-pty's
  * /api/tunnels which shells out to /lxd-exch/system/tu). Provides:
  *   - refresh (also driven by the Window toolbar's "ab-tunnels-refresh" event)
@@ -44,7 +44,7 @@ export default function TunnelsView({ item }: { item: BoardItem }) {
   useEffect(() => { refresh(); }, [refresh]);
 
   // The Window toolbar's "Refresh" button dispatches this event so we don't
-  // have to plumb a ref handle through the canvas tree.
+  // have to plumb a ref handle through the workspace component tree.
   useEffect(() => {
     const onEv = (ev: Event) => {
       const ce = ev as CustomEvent<{ itemId: string }>;

@@ -1,10 +1,10 @@
 export type BoardItemType = 'filebrowser' | 'notes' | 'tunnels';
 
-/** Sort modes for the IDE-view sidebar. */
+/** Sort modes for the workspace sidebar. */
 export type IdeSortMode = 'type' | 'name' | 'recent' | 'status';
 
 /**
- * Layout for a multi-tab group in IDE-view's main pane.
+ * Layout for a multi-entry group in the workspace's main pane.
  *  - single: just the focused tab fills the pane (default).
  *  - v2 / h2: two-up vertical/horizontal split (left|right or top/bottom).
  *  - v3 / h3: three-up split.
@@ -27,15 +27,15 @@ export interface IdeGroupSizes {
 }
 
 /**
- * A group is a tabbed/tiled container of canvas items, used in IDE view only.
- * Membership is by reference — items still exist top-level. Removing from
- * group does not kill the session.
+ * A group is a tabbed/tiled container of direct workspace entries.
+ * Membership uses stable workspace entry keys. Removing the group does not
+ * kill a session or delete a board-backed resource.
  */
 export interface IdeGroup {
-  /** Always prefixed `group:` so it can share id-space with item ids. */
+  /** Always prefixed `group:` so it can share id-space with workspace entry keys. */
   id: string;
   name: string;
-  members: string[];      // canvas item ids
+  members: string[];      // workspace entry keys
   layout: IdeGroupLayout;
   sizes: IdeGroupSizes;
 }
@@ -59,7 +59,6 @@ export interface PtySession {
   id: string;
   name: string;
   project_path: string;
-  project_name?: string;
   last_cwd?: string;
   created_at: string;
   clients: number;
