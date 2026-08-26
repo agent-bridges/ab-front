@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pencil, Trash2, Plus, RefreshCw, ExternalLink } from 'lucide-react';
-import type { CanvasItem } from '../../types';
+import type { BoardItem } from '../../types';
 import { listTunnels, createTunnel, killTunnel, type TunnelEntry, type TunnelsList } from '../../api/tunnels';
 import DialogShell from '../dialogs/DialogShell';
 import ConfirmDialog from '../dialogs/ConfirmDialog';
@@ -13,7 +13,7 @@ import ConfirmDialog from '../dialogs/ConfirmDialog';
  *   - create-tunnel modal (local + public ports)
  *   - per-row edit (= kill + recreate) and delete (= kill PID)
  */
-export default function TunnelsView({ item }: { item: CanvasItem }) {
+export default function TunnelsView({ item }: { item: BoardItem }) {
   const agentId = item.agentId ?? null;
   const [data, setData] = useState<TunnelsList | null>(null);
   const [error, setError] = useState<string | null>(null);

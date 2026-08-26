@@ -43,7 +43,7 @@ export async function killPty(agentId: string, sessionId: string) {
   return readJsonOrThrow(res, 'Failed to close PTY');
 }
 
-export async function updatePtyMeta(agentId: string, sessionId: string, data: { name?: string; label?: string; meta?: Record<string, unknown> }) {
+export async function updatePtyMeta(agentId: string, sessionId: string, data: { name?: string; meta?: Record<string, unknown> }) {
   const res = await authFetch(`/api/agents/${agentId}/pty/${sessionId}/meta`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

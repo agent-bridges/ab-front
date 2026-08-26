@@ -1,8 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import type { CanvasItem } from '../types';
-import { useAgentStore } from '../stores/agentStore';
-import { useCanvasStore } from '../stores/canvasStore';
-import { createPty } from '../api/pty';
+import type { PtySession } from '../types';
 import { authFetch } from '../api/client';
 import { PtyConnection } from '../api/websocket';
 import { getCache, evictOldest } from '../components/terminal/TerminalCache';
@@ -94,12 +91,13 @@ const FULLSCREEN_TUI_COMMANDS = new Set([
   'watch',
 ]);
 
-function hasFullscreenProcess(item: CanvasItem) {
-  return Boolean(item.ptyProcesses?.some((proc) => FULLSCREEN_TUI_COMMANDS.has(proc.cmd)));
+function hasFullscreenProcess(session: PtySession) {
+  return Boolean(session.processes?.some((proc) => FULLSCREEN_TUI_COMMANDS.has(proc.cmd)));
 }
 
 export function useTerminal(
-  item: CanvasItem,
+  session: PtySession,
+  agentId: string,
   wrapperRef: React.RefObject<HTMLDivElement | null>,
   setError: (err: string | null) => void,
 ) {
@@ -111,8 +109,7 @@ export function useTerminal(
   const resizeFrame = useRef<number | null>(null);
   const resizeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const agentId = useAgentStore((s) => s.currentAgentId);
-  const needsFullscreenRedraw = hasFullscreenProcess(item);
+  const needsFullscreenRedraw = hasFullscreenProcess(session);
 
   const setupTerminal = useCallback(async () => {
     const wrapper = wrapperRef.current;
@@ -122,18 +119,7 @@ export function useTerminal(
 
     setError(null);
     const cache = getCache();
-    let ptyId = item.ptyId;
-
-    // If no ptyId yet, create a new PTY
-    if (!ptyId) {
-      const result = await createPty({ agentId, shellOnly: true });
-      if (!result.ok || !result.session_id) {
-        setError(result.error || 'PTY server unavailable');
-        return;
-      }
-      ptyId = result.session_id;
-      useCanvasStore.getState().updateItem(item.id, { ptyId, agentId });
-    }
+    const ptyId = session.id;
 
     // Check cache
     if (cache.has(ptyId)) {
@@ -198,11 +184,6 @@ export function useTerminal(
     });
 
     connection.setOnSessionEnded(() => {
-      useCanvasStore.getState().updateItem(item.id, {
-        ptyAlive: false,
-        ptyProcesses: [],
-        aiStatus: '',
-      });
       setError('Terminal session ended. Reopen it or start a new one.');
     });
 
@@ -265,7 +246,7 @@ export function useTerminal(
       scrollToBottomIfNeeded(term, shouldStickToBottom(cached, stickyBottomUntil.current));
       lastSize.current = { rows: term.rows, cols: term.cols };
     });
-  }, [agentId, item.id, item.ptyId, needsFullscreenRedraw, wrapperRef, setError]);
+  }, [agentId, session.id, needsFullscreenRedraw, wrapperRef, setError]);
 
   const flushResize = useCallback(() => {
     const cached = activeCached.current;
@@ -312,8 +293,7 @@ export function useTerminal(
 
     const wrapper = wrapperRef.current;
     const cached = activeCached.current;
-    const effectiveAgentId = item.agentId || agentId;
-    if (!wrapper || !cached || !effectiveAgentId) return;
+    if (!wrapper || !cached || !agentId) return;
 
     const activeEl = document.activeElement;
     if (!activeEl || !wrapper.contains(activeEl)) return;
@@ -334,7 +314,7 @@ export function useTerminal(
         if (!base64) return;
 
         try {
-          const resp = await authFetch(`/api/agents/${effectiveAgentId}/paste-image`, {
+          const resp = await authFetch(`/api/agents/${agentId}/paste-image`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -356,7 +336,7 @@ export function useTerminal(
       reader.readAsDataURL(file);
       return;
     }
-  }, [agentId, item.agentId, wrapperRef]);
+  }, [agentId, wrapperRef]);
 
   useEffect(() => {
     didSetup.current = false;

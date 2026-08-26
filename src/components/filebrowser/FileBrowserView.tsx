@@ -4,11 +4,10 @@ import {
   FolderPlus, FilePlus, Trash2, Upload, Download, Terminal,
 } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
-import { useCanvasStore } from '../../stores/canvasStore';
-import { saveItemLayout } from '../../api/canvas';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { listDir, createFs, deleteFile, downloadFile, uploadFile } from '../../api/fs';
 import { createPty } from '../../api/pty';
-import type { CanvasItem, FsEntry } from '../../types';
+import type { BoardItem, FsEntry } from '../../types';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -22,9 +21,10 @@ function formatDate(timestamp: number): string {
   return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function FileBrowserView({ item }: { item: CanvasItem }) {
+export default function FileBrowserView({ item }: { item: BoardItem }) {
   const agentId = useAgentStore((s) => s.currentAgentId);
-  const updateItem = useCanvasStore((s) => s.updateItem);
+  const updateItem = useWorkspaceStore((s) => s.updateBoardItem);
+  const openTab = useWorkspaceStore((s) => s.openTab);
 
   const [files, setFiles] = useState<FsEntry[]>([]);
   const [currentPath, setCurrentPath] = useState(item.currentPath || '~');
@@ -146,7 +146,7 @@ export default function FileBrowserView({ item }: { item: CanvasItem }) {
         return;
       }
 
-      saveItemLayout(`pty-${result.session_id}`, item.x + 48, item.y + 48, undefined, agentId);
+      openTab(`session:${result.session_id}`);
     } catch (e: any) {
       setError(e.message || 'Failed to create terminal');
     }

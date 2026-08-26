@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useKeyboardStore } from '../../stores/keyboardStore';
-import type { CanvasItem } from '../../types';
+import type { PtySession } from '../../types';
 
-export default function TerminalView({ item }: { item: CanvasItem }) {
+export default function TerminalView({ session, agentId }: { session: PtySession; agentId: string }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  useTerminal(item, wrapperRef, setError);
+  useTerminal(session, agentId, wrapperRef, setError);
 
   // Register this terminal as the floating-keyboard target whenever the user
   // interacts with it. xterm puts the real input on a hidden textarea, so we
@@ -14,21 +14,20 @@ export default function TerminalView({ item }: { item: CanvasItem }) {
   // not focus the textarea immediately on iOS). On unmount, clear so the
   // keyboard doesn't dangle pointing at a dead terminal.
   useEffect(() => {
-    if (!item.ptyId) return;
     const node = wrapperRef.current;
     if (!node) return;
     const setActive = useKeyboardStore.getState().setActivePtyId;
-    const grab = () => setActive(item.ptyId!);
+    const grab = () => setActive(session.id);
     node.addEventListener('focusin', grab);
     node.addEventListener('pointerdown', grab);
     return () => {
       node.removeEventListener('focusin', grab);
       node.removeEventListener('pointerdown', grab);
-      if (useKeyboardStore.getState().activePtyId === item.ptyId) {
+      if (useKeyboardStore.getState().activePtyId === session.id) {
         setActive(null);
       }
     };
-  }, [item.ptyId]);
+  }, [session.id]);
 
   return (
     <div

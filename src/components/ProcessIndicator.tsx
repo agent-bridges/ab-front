@@ -17,39 +17,27 @@ export const PROCESS_STATUS_THEME: Record<
   {
     dotClass: string;
     borderClass: string;
-    minimapItemClass: string;
-    minimapWindowClass: string;
   }
 > = {
   'ai-busy': {
     dotClass: 'bg-orange-400 animate-pulse',
     borderClass: 'border-orange-400/60',
-    minimapItemClass: 'border-orange-400/70 bg-orange-400/35',
-    minimapWindowClass: 'border-orange-300/60 bg-orange-300/12',
   },
   'ai-idle': {
     dotClass: 'bg-green-400',
     borderClass: 'border-green-400/60',
-    minimapItemClass: 'border-green-400/70 bg-green-400/35',
-    minimapWindowClass: 'border-green-300/55 bg-green-300/12',
   },
   'busy': {
     dotClass: 'bg-blue-400 animate-pulse',
     borderClass: 'border-blue-400/60',
-    minimapItemClass: 'border-blue-400/70 bg-blue-400/35',
-    minimapWindowClass: 'border-blue-300/55 bg-blue-300/12',
   },
   'idle': {
     dotClass: 'bg-green-400',
     borderClass: 'border-canvas-border hover:border-canvas-accent',
-    minimapItemClass: 'border-canvas-accent/40 bg-canvas-accent/30',
-    minimapWindowClass: 'border-canvas-text/35 bg-canvas-text/10',
   },
   'dead': {
     dotClass: 'bg-neutral-500',
     borderClass: 'border-canvas-border',
-    minimapItemClass: 'border-neutral-500/50 bg-neutral-500/20',
-    minimapWindowClass: 'border-neutral-500/35 bg-neutral-500/8',
   },
 };
 

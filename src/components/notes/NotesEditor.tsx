@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useCanvasStore } from '../../stores/canvasStore';
-import type { CanvasItem } from '../../types';
+import { useWorkspaceStore } from '../../stores/workspaceStore';
+import type { BoardItem } from '../../types';
 import type { NoteViewMode } from '../../hooks/useNoteViewMode';
 import MarkdownPreview from './MarkdownPreview';
 
@@ -8,10 +8,10 @@ export default function NotesEditor({
   item,
   mode = 'edit',
 }: {
-  item: CanvasItem;
+  item: BoardItem;
   mode?: NoteViewMode;
 }) {
-  const updateItem = useCanvasStore((s) => s.updateItem);
+  const updateItem = useWorkspaceStore((s) => s.updateBoardItem);
   const [content, setContent] = useState(item.noteContent || '');
 
   // Sync from store on item change

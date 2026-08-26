@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAgentStore } from './stores/agentStore';
-import { useCanvasStore } from './stores/canvasStore';
+import { useWorkspaceStore } from './stores/workspaceStore';
+import { usePtyStore } from './stores/ptyStore';
 import { useAuthStore } from './stores/authStore';
-import { useIsMobile } from './hooks/useIsMobile';
 import { PtyStateConnection } from './api/ptyState';
 import { checkAuth } from './api/auth';
-import Toolbar from './components/Toolbar';
-import Canvas from './canvas/Canvas';
-import MobileWindows from './canvas/MobileWindows';
+import Workspace from './workspace/Workspace';
 import LoginPage from './components/auth/LoginPage';
 import FloatingKeyboard from './components/keyboard/FloatingKeyboard';
 import FloatingToolbar from './components/keyboard/FloatingToolbar';
@@ -28,13 +26,12 @@ export default function App() {
   const currentAgentId = useAgentStore((s) => s.currentAgentId);
   const boardRefreshToken = useAgentStore((s) => s.boardRefreshToken);
   const setCurrentAgent = useAgentStore((s) => s.setCurrentAgent);
-  const isMobile = useIsMobile();
   const { checkInit } = useAuthStore();
   const [authChecked, setAuthChecked] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [routeAgentId, setRouteAgentId] = useState(() => getAgentIdFromPath(window.location.pathname));
 
-  const loadItems = useCanvasStore((s) => s.loadItems);
+  const loadItems = useWorkspaceStore((s) => s.load);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,15 +118,19 @@ export default function App() {
     loadItems(currentAgentId);
   }, [boardRefreshToken, currentAgentId, loadItems, needsAuth]);
 
-  const syncTerminals = useCanvasStore((s) => s.syncTerminals);
+  const replaceSessions = usePtyStore((s) => s.replaceSessions);
+  const setPtyConnected = usePtyStore((s) => s.setConnected);
+  const clearPty = usePtyStore((s) => s.clear);
 
-  // PTY sessions -> canvas terminal items (sessions are source of truth)
+  // PTY sessions remain the source of truth and are stored directly by id/name.
   useEffect(() => {
-    if (!currentAgentId) return;
+    if (!currentAgentId) { clearPty(); return; }
+    clearPty();
     const conn = new PtyStateConnection(currentAgentId);
     conn.setOnSessions((sessions) => {
-      syncTerminals(sessions, currentAgentId);
+      replaceSessions(currentAgentId, sessions);
     });
+    conn.setOnConnected(setPtyConnected);
     // Daemon broadcasts when board_items mutates (e.g. peer agent runs
     // `ab notes create`). Debounce a burst of CLI ops into one re-fetch.
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
@@ -145,7 +146,7 @@ export default function App() {
       if (reloadTimer) clearTimeout(reloadTimer);
       conn.destroy();
     };
-  }, [boardRefreshToken, currentAgentId, syncTerminals, loadItems]);
+  }, [boardRefreshToken, clearPty, currentAgentId, loadItems, replaceSessions, setPtyConnected]);
 
   if (!authChecked) return null;
   if (needsAuth) {
@@ -166,9 +167,7 @@ export default function App() {
 
   return (
     <div className="h-full flex flex-col relative">
-      <Toolbar />
-      <Canvas />
-      {isMobile && <MobileWindows />}
+      <Workspace />
       <FloatingKeyboard />
       <FloatingToolbar />
     </div>

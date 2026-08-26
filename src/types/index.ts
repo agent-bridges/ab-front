@@ -1,12 +1,4 @@
-export type CanvasItemType = 'terminal' | 'filebrowser' | 'notes' | 'anchor' | 'tunnels';
-
-/**
- * Desktop render mode. Mobile always renders the icon-grid + tab manager;
- * this only affects the desktop path:
- *   - 'canvas' (default): existing pan/zoom canvas with floating windows.
- *   - 'ide':     VSCode-style sidebar list + tabbed main pane.
- */
-export type ViewMode = 'canvas' | 'ide';
+export type BoardItemType = 'filebrowser' | 'notes' | 'tunnels';
 
 /** Sort modes for the IDE-view sidebar. */
 export type IdeSortMode = 'type' | 'name' | 'recent' | 'status';
@@ -48,52 +40,13 @@ export interface IdeGroup {
   sizes: IdeGroupSizes;
 }
 
-export interface WindowState {
-  isOpen: boolean;
-  isMinimized: boolean;
-  locked?: boolean;
-  /**
-   * When `locked` is true, these hold the viewport (screen-pixel) offset
-   * relative to the canvas root, plus the on-screen width/height snapshotted
-   * at lock time. The window is rendered viewport-fixed (ignores pan/zoom).
-   * When unlocked, these are cleared and x/y/w/h (world coords) take over.
-   */
-  lockedViewportX?: number;
-  lockedViewportY?: number;
-  lockedViewportW?: number;
-  lockedViewportH?: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  zIndex: number;
-}
-
-export interface CanvasItem {
+export interface BoardItem {
   id: string;
-  type: CanvasItemType;
-  x: number;
-  y: number;
+  type: BoardItemType;
   label: string;
-  anchorZ?: number;
-  pinned?: boolean;
-  pinnedViewportX?: number;
-  pinnedViewportY?: number;
-  /** Window state when opened */
-  window?: WindowState;
-  /** For terminal items */
-  ptyId?: string;
   agentId?: string;
-  /** For notes items */
   noteContent?: string;
-  /** For filebrowser items */
   currentPath?: string;
-  /** Live process info from PTY state */
-  ptyProcesses?: ProcessInfo[];
-  /** Whether the PTY session is alive */
-  ptyAlive?: boolean;
-  /** AI status from Claude Code hooks: "working", "idle", "tool:Bash", etc. */
-  aiStatus?: string;
 }
 
 export interface ProcessInfo {
@@ -113,7 +66,6 @@ export interface PtySession {
   alive: boolean;
   type: 'bash' | 'claude';
   locked: boolean;
-  label: string;
   claude_session_id?: string;
   processes?: ProcessInfo[];
   ai_status?: string;
