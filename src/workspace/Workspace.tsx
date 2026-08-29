@@ -23,6 +23,8 @@ import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/
 import { agentDisplayLabel, relayCanConnect, relayStateLabel } from '../utils/agentDisplay';
 import { useCapabilitiesStore } from '../stores/capabilitiesStore';
 import DiscoveryErrorBanner from '../components/DiscoveryErrorBanner';
+import RelayAdminModal from '../components/RelayAdminModal';
+import type { Relay } from '../types';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -112,6 +114,8 @@ export default function Workspace() {
   const management = managementEntrypointsForCapabilities(capabilities);
   const agents = useAgentStore((state) => state.agents);
   const relays = useAgentStore((state) => state.relays);
+  const relayRevision = useAgentStore((state) => state.revision);
+  const canAdministerRelays = management.relayAdministration && relayRevision !== null;
   const relayError = useAgentStore((state) => state.discoveryError);
   const loadRelays = useAgentStore((state) => state.loadRelays);
   const capabilitiesError = useCapabilitiesStore((state) => state.error);
@@ -147,6 +151,7 @@ export default function Workspace() {
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [relayEditor, setRelayEditor] = useState<{ relay: Relay | null; deleting: boolean } | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
@@ -215,6 +220,7 @@ export default function Workspace() {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter sessions and tools"
           className="min-w-0 flex-1 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs text-canvas-text outline-none focus:border-canvas-accent" />
         <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSort(sort === 'type' ? 'name' : sort === 'name' ? 'recent' : sort === 'recent' ? 'status' : 'type')} title={`Sort: ${sort}`}><ArrowDownUp size={13} /></button>
+        {canAdministerRelays && <button className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-semibold text-canvas-accent hover:bg-canvas-border" onClick={() => setRelayEditor({ relay: null, deleting: false })} title="Add relay"><Plus size={12} />Relay</button>}
         {isMobile && <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSidebarOpen(false)}><X size={14} /></button>}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -223,6 +229,7 @@ export default function Workspace() {
             <span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} />
             <span className="min-w-0 flex-1 truncate">{relay.name}</span>
             <span className="font-normal normal-case">{relayStateLabel(relay)}</span>
+            {canAdministerRelays && <><button className="rounded p-0.5 hover:bg-canvas-border" onClick={() => setRelayEditor({ relay, deleting: false })} title={`Edit ${relay.name}`}><Pencil size={11} /></button><button className="rounded p-0.5 text-red-400 hover:bg-red-500/10" onClick={() => setRelayEditor({ relay, deleting: true })} title={`Delete ${relay.name}`}><Trash2 size={11} /></button></>}
           </div>
           {relay.machines.map((machine) => {
           const agent = agentById.get(machine.id);
@@ -303,6 +310,7 @@ export default function Workspace() {
       </main>
     </div>
     {management.connections && <ConnectionSettingsModal open={connectionsOpen} onClose={() => setConnectionsOpen(false)} />}
+    {canAdministerRelays && <RelayAdminModal open={relayEditor !== null} relay={relayEditor?.relay || null} revision={relayRevision} confirmDeleteOnOpen={relayEditor?.deleting} onClose={() => setRelayEditor(null)} onChanged={() => loadRelays(currentAgentId)} />}
     <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     <ConfirmDialog open={!!deleteEntry} title={deleteEntry?.kind === 'session' ? `Kill "${deleteEntry.session.name}"?` : `Delete "${deleteEntry?.item.label}"?`} message={deleteEntry?.kind === 'session' ? 'This terminates the live PTY session.' : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
   </div>;

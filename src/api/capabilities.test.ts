@@ -24,6 +24,7 @@ describe('capability discovery', () => {
       connections: false,
       account: false,
       clientCertificates: false,
+      relayAdministration: false,
     });
     expect(CLOSED_CAPABILITIES).toMatchObject({
       agentMutation: false,
@@ -31,6 +32,7 @@ describe('capability discovery', () => {
       clientCertManagement: false,
       directAgents: false,
       relayRoutes: false,
+      relayMutation: false,
       files: false,
       tunnels: false,
       canvas: false,
@@ -43,6 +45,7 @@ describe('capability discovery', () => {
       agent_mutation: false,
       password_change: false,
       client_cert_management: false,
+      relay_mutation: false,
       relay_routes: true,
       files: true,
       tunnels: true,
@@ -53,6 +56,7 @@ describe('capability discovery', () => {
       connections: false,
       account: false,
       clientCertificates: false,
+      relayAdministration: false,
     });
     expect(settingsSectionsForCapabilities(capabilities)).toEqual(['visual']);
     expect(capabilities.relayRoutes).toBe(true);

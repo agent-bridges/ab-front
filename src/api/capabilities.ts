@@ -7,6 +7,7 @@ export interface Capabilities {
   clientCertManagement: boolean;
   directAgents: boolean;
   relayRoutes: boolean;
+  relayMutation: boolean;
   files: boolean;
   tunnels: boolean;
   canvas: boolean;
@@ -19,6 +20,7 @@ export const CLOSED_CAPABILITIES: Capabilities = {
   clientCertManagement: false,
   directAgents: false,
   relayRoutes: false,
+  relayMutation: false,
   files: false,
   tunnels: false,
   canvas: false,
@@ -45,6 +47,7 @@ export function parseCapabilities(payload: unknown): Capabilities {
     clientCertManagement: booleanCapability(raw, 'client_cert_management', false),
     directAgents: booleanCapability(raw, 'direct_agents', false),
     relayRoutes: booleanCapability(raw, 'relay_routes', false),
+    relayMutation: booleanCapability(raw, 'relay_mutation', false),
     files: booleanCapability(raw, 'files', false),
     tunnels: booleanCapability(raw, 'tunnels', false),
     canvas: booleanCapability(raw, 'canvas', false),

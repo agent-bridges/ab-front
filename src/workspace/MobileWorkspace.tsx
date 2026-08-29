@@ -23,11 +23,12 @@ import { useAuthStore } from '../stores/authStore';
 import { useKeyboardStore } from '../stores/keyboardStore';
 import { usePtyStore } from '../stores/ptyStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
-import type { BoardItem, BoardItemType, PtySession } from '../types';
+import type { BoardItem, BoardItemType, PtySession, Relay } from '../types';
 import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/useCapabilities';
 import { agentDisplayLabel, relayCanConnect, relayStateLabel } from '../utils/agentDisplay';
 import { useCapabilitiesStore } from '../stores/capabilitiesStore';
 import DiscoveryErrorBanner from '../components/DiscoveryErrorBanner';
+import RelayAdminModal from '../components/RelayAdminModal';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -106,6 +107,8 @@ export default function MobileWorkspace() {
   const management = managementEntrypointsForCapabilities(capabilities);
   const agents = useAgentStore((state) => state.agents);
   const relays = useAgentStore((state) => state.relays);
+  const relayRevision = useAgentStore((state) => state.revision);
+  const canAdministerRelays = management.relayAdministration && relayRevision !== null;
   const relayError = useAgentStore((state) => state.discoveryError);
   const loadRelays = useAgentStore((state) => state.loadRelays);
   const capabilitiesError = useCapabilitiesStore((state) => state.error);
@@ -141,6 +144,7 @@ export default function MobileWorkspace() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [relayEditor, setRelayEditor] = useState<{ relay: Relay | null; deleting: boolean } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [contextEntry, setContextEntry] = useState<MobileEntry | null>(null);
   const [renamingEntry, setRenamingEntry] = useState<MobileEntry | null>(null);
@@ -253,7 +257,7 @@ export default function MobileWorkspace() {
           <button onClick={() => setAgentMenuOpen((value) => !value)} className="flex max-w-40 items-center gap-1 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs" title={currentAgent ? agentDisplayLabel(currentAgent) : 'Select agent'}>
             <span className="truncate">{currentAgent ? agentDisplayLabel(currentAgent) : 'Select'}</span><span className="text-canvas-muted">▾</span>
           </button>
-          {agentMenuOpen && <><button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" /><div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[220px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface py-1 shadow-lg">{relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}><div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted"><span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{relay.name}</span><span className="font-normal normal-case">{relayStateLabel(relay)}</span></div>{relay.machines.map((machine) => { const agent = agentById.get(machine.id); if (!agent) return null; return <button key={agent.id} disabled={!relayCanConnect(relay) || !machine.online} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className={`flex w-full items-center gap-2 px-5 py-2 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''} ${!machine.online ? 'opacity-60' : ''}`}><span className={`h-1.5 w-1.5 rounded-full ${machine.online ? 'bg-emerald-500' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{agent.name}</span>{!machine.online && <span className="text-[9px]">offline</span>}</button>; })}{relay.machines.length === 0 && <div className="px-5 py-2 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}</div>)}</div></>}
+          {agentMenuOpen && <><button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" /><div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[240px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface py-1 shadow-lg">{relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}><div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted"><span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{relay.name}</span><span className="font-normal normal-case">{relayStateLabel(relay)}</span>{canAdministerRelays && <><button className="rounded p-0.5 hover:bg-canvas-border" onClick={() => { setRelayEditor({ relay, deleting: false }); setAgentMenuOpen(false); }} title={`Edit ${relay.name}`}><Pencil size={11} /></button><button className="rounded p-0.5 text-red-400 hover:bg-red-500/10" onClick={() => { setRelayEditor({ relay, deleting: true }); setAgentMenuOpen(false); }} title={`Delete ${relay.name}`}><Trash2 size={11} /></button></>}</div>{relay.machines.map((machine) => { const agent = agentById.get(machine.id); if (!agent) return null; return <button key={agent.id} disabled={!relayCanConnect(relay) || !machine.online} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className={`flex w-full items-center gap-2 px-5 py-2 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''} ${!machine.online ? 'opacity-60' : ''}`}><span className={`h-1.5 w-1.5 rounded-full ${machine.online ? 'bg-emerald-500' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{agent.name}</span>{!machine.online && <span className="text-[9px]">offline</span>}</button>; })}{relay.machines.length === 0 && <div className="px-5 py-2 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}</div>)}{canAdministerRelays && <button onClick={() => { setRelayEditor({ relay: null, deleting: false }); setAgentMenuOpen(false); }} className="mt-1 flex w-full items-center gap-2 border-t border-canvas-border px-3 py-2 text-xs font-semibold text-canvas-accent hover:bg-canvas-border"><Plus size={14} />Add relay</button>}</div></>}
         </div>
         <button onClick={() => setKeyboardVisible(!keyboardVisible)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Touch keyboard"><Keyboard size={16} className={keyboardVisible ? 'text-canvas-accent' : 'text-canvas-muted'} /></button>
         {management.connections && <button onClick={() => setConnectionOpen(true)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Connections"><Settings2 size={16} className="text-canvas-muted" /></button>}
@@ -305,6 +309,7 @@ export default function MobileWorkspace() {
       <MobileVisualPanel open={visualOpen} onClose={() => setVisualOpen(false)} />
       {management.account && <MobileAccountPanel open={accountOpen} onClose={() => setAccountOpen(false)} />}
       {management.clientCertificates && <MobileAuthPanel open={authOpen} onClose={() => setAuthOpen(false)} />}
+      {canAdministerRelays && <RelayAdminModal open={relayEditor !== null} relay={relayEditor?.relay || null} revision={relayRevision} confirmDeleteOnOpen={relayEditor?.deleting} onClose={() => setRelayEditor(null)} onChanged={() => loadRelays(currentAgentId)} />}
       {logoutOpen && <LogoutDialog onCancel={() => setLogoutOpen(false)} onConfirm={() => void logoutRequest().then(() => { authLogout(); window.location.reload(); })} />}
       <ConfirmDialog open={!!deleteEntry} title={deleteEntry?.kind === 'session' ? `Kill "${deleteEntry.session.name}"?` : `Delete "${deleteEntry?.item.label}"?`} message={deleteEntry?.kind === 'session' ? 'This terminates the live PTY session.' : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
     </div>

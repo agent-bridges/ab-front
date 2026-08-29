@@ -1,5 +1,5 @@
 import { authFetch } from './client';
-import type { Relay, RelayMachine, RelayStatus } from '../types';
+import type { Relay, RelayDiscovery, RelayMachine, RelayStatus } from '../types';
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`Relay discovery is missing ${field}`);
@@ -28,9 +28,16 @@ function parseRelayStatus(value: unknown, relayId: string): RelayStatus {
   throw new Error(`Relay ${relayId} returned an invalid status`);
 }
 
-export function parseRelays(payload: unknown): Relay[] {
-  if (!Array.isArray(payload)) throw new Error('Relay discovery returned an invalid response');
-  return payload.map((value) => {
+export function parseRelays(payload: unknown): RelayDiscovery {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Relay discovery returned an invalid response');
+  }
+  const envelope = payload as Record<string, unknown>;
+  if (!Number.isSafeInteger(envelope.revision) || Number(envelope.revision) < 1) {
+    throw new Error('Relay discovery returned an invalid revision');
+  }
+  if (!Array.isArray(envelope.relays)) throw new Error('Relay discovery is missing relays');
+  const relays = envelope.relays.map((value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('Relay discovery returned an invalid relay');
     }
@@ -40,15 +47,17 @@ export function parseRelays(payload: unknown): Relay[] {
     return {
       id,
       name: requiredString(row.name, 'relay name'),
-      address: typeof row.address === 'string' ? row.address : undefined,
+      address: requiredString(row.address, 'relay address'),
+      server_fingerprint: requiredString(row.server_fingerprint, 'relay server fingerprint'),
       enabled: row.enabled === true,
       status: parseRelayStatus(row.status, id),
       machines: row.machines.map((machine) => parseMachine(machine, id)),
     };
   });
+  return { revision: Number(envelope.revision), relays };
 }
 
-export async function fetchRelays(): Promise<Relay[]> {
+export async function fetchRelays(): Promise<RelayDiscovery> {
   const response = await authFetch('/api/relays', { cache: 'no-store' });
   if (!response.ok) throw new Error(`Relay discovery failed (${response.status})`);
   return parseRelays(await response.json());

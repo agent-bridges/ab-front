@@ -7,6 +7,7 @@ export interface ManagementEntrypoints {
   connections: boolean;
   account: boolean;
   clientCertificates: boolean;
+  relayAdministration: boolean;
 }
 
 export function managementEntrypointsForCapabilities(capabilities: Capabilities): ManagementEntrypoints {
@@ -14,6 +15,7 @@ export function managementEntrypointsForCapabilities(capabilities: Capabilities)
     connections: capabilities.agentMutation,
     account: capabilities.passwordChange,
     clientCertificates: capabilities.clientCertManagement,
+    relayAdministration: capabilities.relayMutation,
   };
 }
 

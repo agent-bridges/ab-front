@@ -97,10 +97,16 @@ export type RelayStatus = 'online' | 'offline' | 'disabled';
 export interface Relay {
   id: string;
   name: string;
-  address?: string;
+  address: string;
+  server_fingerprint: string;
   enabled: boolean;
   status: RelayStatus;
   machines: RelayMachine[];
+}
+
+export interface RelayDiscovery {
+  revision: number;
+  relays: Relay[];
 }
 
 export interface FsEntry {

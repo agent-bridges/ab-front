@@ -6,6 +6,7 @@ import { flattenRelayMachines, relayCanConnect } from '../utils/agentDisplay';
 interface AgentState {
   agents: Agent[];
   relays: Relay[];
+  revision: number | null;
   currentAgentId: string | null;
   boardRefreshToken: number;
   loading: boolean;
@@ -19,6 +20,7 @@ interface AgentState {
 export const useAgentStore = create<AgentState>((set, get) => ({
   agents: [],
   relays: [],
+  revision: null,
   currentAgentId: null,
   boardRefreshToken: 0,
   loading: false,
@@ -27,6 +29,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   reset: () => set({
     agents: [],
     relays: [],
+    revision: null,
     currentAgentId: null,
     loading: false,
     discoveryError: null,
@@ -37,7 +40,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   loadRelays: async (preferredAgentId) => {
     set({ loading: true, discoveryError: null });
     try {
-      const relays = await fetchRelays();
+      const discovery = await fetchRelays();
+      const { relays } = discovery;
       const agents = flattenRelayMachines(relays);
       const connectableIds = new Set(relays
         .filter(relayCanConnect)
@@ -56,6 +60,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set({
         agents,
         relays,
+        revision: discovery.revision,
         loading: false,
         currentAgentId: nextCurrentAgentId,
         discoveryError: null,
@@ -65,6 +70,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set({
         agents: [],
         relays: [],
+        revision: null,
         currentAgentId: null,
         loading: false,
         discoveryError: e instanceof Error ? e.message : 'Relay discovery failed',

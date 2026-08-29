@@ -6,8 +6,8 @@ describe('agent relay presentation', () => {
   it('keeps the same daemon distinct through Home and Remote', () => {
     const fingerprint = 'ab'.repeat(32);
     const relays: Relay[] = [
-      { id: 'home', name: 'Home', enabled: true, status: 'online', machines: [{ id: `home~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
-      { id: 'remote', name: 'Remote', enabled: true, status: 'online', machines: [{ id: `remote~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
+      { id: 'home', name: 'Home', address: 'home:9500', server_fingerprint: '00'.repeat(32), enabled: true, status: 'online', machines: [{ id: `home~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
+      { id: 'remote', name: 'Remote', address: 'remote:9500', server_fingerprint: '11'.repeat(32), enabled: true, status: 'online', machines: [{ id: `remote~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
     ];
     const [home, remote] = flattenRelayMachines(relays);
 
@@ -19,8 +19,8 @@ describe('agent relay presentation', () => {
 
   it('preserves disabled and empty relay nodes in the hierarchy', () => {
     const relays: Relay[] = [
-      { id: 'home', name: 'Home', enabled: false, status: 'offline', machines: [] },
-      { id: 'remote', name: 'Remote', enabled: true, status: 'offline', machines: [] },
+      { id: 'home', name: 'Home', address: 'home:9500', server_fingerprint: '00'.repeat(32), enabled: false, status: 'offline', machines: [] },
+      { id: 'remote', name: 'Remote', address: 'remote:9500', server_fingerprint: '11'.repeat(32), enabled: true, status: 'offline', machines: [] },
     ];
 
     expect(relays.map((relay) => [relay.name, relayStateLabel(relay), relay.machines.length])).toEqual([

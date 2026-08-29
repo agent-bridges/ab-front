@@ -29,15 +29,32 @@ describe('relay discovery store', () => {
 
   it('selects only an online machine on an online enabled relay', async () => {
     const fingerprint = 'ab'.repeat(32);
-    vi.mocked(fetchRelays).mockResolvedValue([
-      { id: 'remote', name: 'Remote', enabled: false, status: 'disabled', machines: [{ id: `remote~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
-      { id: 'home', name: 'Home', enabled: true, status: 'online', machines: [{ id: `home~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
-    ]);
+    vi.mocked(fetchRelays).mockResolvedValue({ revision: 4, relays: [
+      { id: 'remote', name: 'Remote', address: 'remote:9500', server_fingerprint: '11'.repeat(32), enabled: false, status: 'disabled', machines: [{ id: `remote~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
+      { id: 'home', name: 'Home', address: 'home:9500', server_fingerprint: '00'.repeat(32), enabled: true, status: 'online', machines: [{ id: `home~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
+    ] });
 
     await useAgentStore.getState().loadRelays(`remote~${fingerprint}`);
 
     expect(useAgentStore.getState().currentAgentId).toBe(`home~${fingerprint}`);
     expect(useAgentStore.getState().relays).toHaveLength(2);
     expect(useAgentStore.getState().agents).toHaveLength(2);
+    expect(useAgentStore.getState().revision).toBe(4);
+  });
+
+  it('preserves the selected daemon route across a post-mutation refresh', async () => {
+    const fingerprint = 'cd'.repeat(32);
+    const homeId = `home~${fingerprint}`;
+    const home = { id: 'home', name: 'Home', address: 'home:9500', server_fingerprint: '00'.repeat(32), enabled: true, status: 'online' as const, machines: [{ id: homeId, name: 'ab2', fingerprint, online: true }] };
+    const remote = { id: 'remote', name: 'Remote', address: 'remote:9500', server_fingerprint: '11'.repeat(32), enabled: true, status: 'online' as const, machines: [{ id: `remote~${fingerprint}`, name: 'ab2', fingerprint, online: true }] };
+    vi.mocked(fetchRelays)
+      .mockResolvedValueOnce({ revision: 10, relays: [home, remote] })
+      .mockResolvedValueOnce({ revision: 11, relays: [remote, home] });
+
+    await useAgentStore.getState().loadRelays(homeId);
+    await useAgentStore.getState().loadRelays(homeId);
+
+    expect(useAgentStore.getState().currentAgentId).toBe(homeId);
+    expect(useAgentStore.getState().revision).toBe(11);
   });
 });
