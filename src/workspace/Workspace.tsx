@@ -29,6 +29,13 @@ import type { Relay } from '../types';
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
 
+export const DESKTOP_TREE_DEPTH_CLASSES = {
+  relayRow: 'px-2',
+  daemonBranch: 'ml-4 border-l border-canvas-border/70',
+  daemonRow: 'pl-3 pr-2',
+  childrenBranch: 'ml-4 border-l border-canvas-border pl-3',
+} as const;
+
 export function claimInitialPaneForAgent(
   visitedAgents: Set<string>,
   agentId: string,
@@ -225,7 +232,7 @@ export default function Workspace() {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}>
-          <div className="flex min-h-7 items-center gap-2 px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted">
+          <div className={`flex min-h-7 items-center gap-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted ${DESKTOP_TREE_DEPTH_CLASSES.relayRow}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} />
             <span className="min-w-0 flex-1 truncate">{relay.name}</span>
             <span className="font-normal normal-case">{relayStateLabel(relay)}</span>
@@ -236,12 +243,12 @@ export default function Workspace() {
           if (!agent) return null;
           const current = agent.id === currentAgentId;
           const expanded = expandedAgents.has(agent.id);
-          return <div key={agent.id}>
-            <button disabled={!relayCanConnect(relay) || !machine.online} className={`flex h-7 w-full items-center gap-1 pl-5 pr-2 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${current ? 'text-canvas-accent' : 'text-canvas-text'} ${!machine.online ? 'opacity-60' : ''}`}
+          return <div key={agent.id} className={DESKTOP_TREE_DEPTH_CLASSES.daemonBranch}>
+            <button disabled={!relayCanConnect(relay) || !machine.online} className={`flex h-7 w-full items-center gap-1 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} ${current ? 'text-canvas-accent' : 'text-canvas-text'} ${!machine.online ? 'opacity-60' : ''}`}
               onClick={() => { setExpandedAgents((set) => { const next = new Set(set); expanded ? next.delete(agent.id) : next.add(agent.id); return next; }); if (!current) setCurrentAgent(agent.id); }}>
               {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className={`h-1.5 w-1.5 rounded-full ${current && connected ? 'bg-green-400' : machine.online ? 'bg-emerald-500/70' : 'bg-canvas-muted'}`} /><span className="truncate font-medium">{agent.name}</span>{!machine.online && <span className="ml-auto text-[9px] text-canvas-muted">offline</span>}
             </button>
-            {expanded && current && <div className="ml-3 border-l border-canvas-border pl-1">
+            {expanded && current && <div className={DESKTOP_TREE_DEPTH_CLASSES.childrenBranch}>
               {visibleEntries.map((entry) => <div key={entry.key} className={`group flex min-h-7 items-center gap-2 rounded px-2 text-xs hover:bg-canvas-border ${focusedItemId === entry.key ? 'bg-canvas-accent/15 text-canvas-accent' : 'text-canvas-text'}`}>
                 <button className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={() => { openTab(entry.key); if (isMobile) setSidebarOpen(false); }} onDoubleClick={() => setEditingKey(entry.key)}>
                   <EntryIcon entry={entry} />
@@ -253,7 +260,7 @@ export default function Workspace() {
             </div>}
           </div>;
           })}
-          {relay.machines.length === 0 && <div className="px-5 py-1.5 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}
+          {relay.machines.length === 0 && <div className={`${DESKTOP_TREE_DEPTH_CLASSES.daemonBranch} ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} py-1.5 text-[10px] text-canvas-muted`}>{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}
         </div>)}
       </div>
       {!isMobile && <div className="absolute inset-y-0 -right-1 w-2 cursor-col-resize" onPointerDown={(event) => { resizeRef.current = { x: event.clientX, width: sidebarWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (resizeRef.current) setSidebarWidth(resizeRef.current.width + event.clientX - resizeRef.current.x); }} onPointerUp={() => { resizeRef.current = null; }} />}

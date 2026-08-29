@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BoardItem, PtySession } from '../types';
-import { claimInitialPaneForAgent, workspaceEntriesForAgent } from './Workspace';
+import { claimInitialPaneForAgent, DESKTOP_TREE_DEPTH_CLASSES, workspaceEntriesForAgent } from './Workspace';
 
 const session = (id: string, name = id): PtySession => ({
   id,
@@ -14,6 +14,14 @@ const session = (id: string, name = id): PtySession => ({
 });
 
 describe('Workspace agent transitions', () => {
+  it('uses explicit Relay -> daemon -> child depth guides', () => {
+    expect(DESKTOP_TREE_DEPTH_CLASSES.relayRow).toBe('px-2');
+    expect(DESKTOP_TREE_DEPTH_CLASSES.daemonBranch).toContain('ml-4');
+    expect(DESKTOP_TREE_DEPTH_CLASSES.childrenBranch).toContain('ml-4');
+    expect(DESKTOP_TREE_DEPTH_CLASSES.daemonBranch).toContain('border-l');
+    expect(DESKTOP_TREE_DEPTH_CLASSES.childrenBranch).toContain('border-l');
+  });
+
   it('does not reopen an explicitly hidden final tab after A -> B -> A', () => {
     const visited = new Set<string>();
     expect(claimInitialPaneForAgent(visited, 'A', false, true)).toBe(true);
