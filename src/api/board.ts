@@ -2,7 +2,7 @@ import { authFetch } from './client';
 import { readJsonOrThrow, throwFromResponse } from './http';
 import type { BoardItem, BoardItemType } from '../types';
 
-interface LegacyBoardItem {
+interface CanvasBoardItem {
   id: string;
   type: string;
   label?: string;
@@ -16,18 +16,29 @@ const BOARD_TYPES = new Set<BoardItemType>(['filebrowser', 'notes', 'tunnels']);
 export async function fetchBoardItems(agentId: string | null): Promise<BoardItem[]> {
   if (!agentId) return [];
   const response = await authFetch(`/api/canvas?agent_id=${encodeURIComponent(agentId)}`);
-  if (response.status === 404) return [];
-  const items = await readJsonOrThrow<LegacyBoardItem[]>(response, 'Failed to fetch workspace resources');
-  return items
-    .filter((item): item is LegacyBoardItem & { type: BoardItemType } => BOARD_TYPES.has(item.type as BoardItemType))
-    .map((item) => ({
+  const payload = await readJsonOrThrow<unknown>(response, 'Failed to fetch workspace resources');
+  if (!Array.isArray(payload)) throw new Error('Failed to fetch workspace resources: invalid response');
+  return payload.map((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('Failed to fetch workspace resources: invalid item');
+    }
+    const item = value as CanvasBoardItem;
+    if (typeof item.id !== 'string' || !item.id || typeof item.type !== 'string' || !BOARD_TYPES.has(item.type as BoardItemType)) {
+      throw new Error('Failed to fetch workspace resources: invalid item');
+    }
+    if (item.label !== undefined && typeof item.label !== 'string') throw new Error('Failed to fetch workspace resources: invalid label');
+    if (item.agentId !== undefined && typeof item.agentId !== 'string') throw new Error('Failed to fetch workspace resources: invalid agent id');
+    if (item.noteContent !== undefined && typeof item.noteContent !== 'string') throw new Error('Failed to fetch workspace resources: invalid note content');
+    if (item.currentPath !== undefined && typeof item.currentPath !== 'string') throw new Error('Failed to fetch workspace resources: invalid current path');
+    return {
       id: item.id,
-      type: item.type,
+      type: item.type as BoardItemType,
       label: item.label || (item.type === 'filebrowser' ? 'Files' : item.type === 'notes' ? 'Notes' : 'Tunnels'),
       agentId: item.agentId || agentId,
       noteContent: item.noteContent,
       currentPath: item.currentPath,
-    }));
+    };
+  });
 }
 
 export async function saveBoardItem(item: BoardItem): Promise<void> {

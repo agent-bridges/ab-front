@@ -19,5 +19,9 @@ export async function readJsonOrThrow<T>(res: Response, fallbackMessage: string)
   if (!res.ok) {
     await throwFromResponse(res, fallbackMessage);
   }
-  return readJson<T>(res, {} as T);
+  try {
+    return await res.json() as T;
+  } catch {
+    throw new Error(`${fallbackMessage}: invalid JSON response`);
+  }
 }

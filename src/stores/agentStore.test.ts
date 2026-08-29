@@ -27,7 +27,7 @@ describe('relay discovery store', () => {
     });
   });
 
-  it('selects only an online machine on an online enabled relay', async () => {
+  it('preserves the exact requested route even when it is disabled', async () => {
     const fingerprint = 'ab'.repeat(32);
     vi.mocked(fetchRelays).mockResolvedValue({ revision: 4, relays: [
       { id: 'remote', name: 'Remote', address: 'remote:9500', server_fingerprint: '11'.repeat(32), enabled: false, status: 'disabled', machines: [{ id: `remote~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
@@ -36,10 +36,21 @@ describe('relay discovery store', () => {
 
     await useAgentStore.getState().loadRelays(`remote~${fingerprint}`);
 
-    expect(useAgentStore.getState().currentAgentId).toBe(`home~${fingerprint}`);
+    expect(useAgentStore.getState().currentAgentId).toBe(`remote~${fingerprint}`);
     expect(useAgentStore.getState().relays).toHaveLength(2);
     expect(useAgentStore.getState().agents).toHaveLength(2);
     expect(useAgentStore.getState().revision).toBe(4);
+  });
+
+  it('does not select the first discovered route when no route was requested', async () => {
+    const fingerprint = 'ef'.repeat(32);
+    vi.mocked(fetchRelays).mockResolvedValue({ revision: 1, relays: [
+      { id: 'home', name: 'Home', address: 'home:9500', server_fingerprint: '00'.repeat(32), enabled: true, status: 'online', machines: [{ id: `home~${fingerprint}`, name: 'ab2', fingerprint, online: true }] },
+    ] });
+
+    await useAgentStore.getState().loadRelays();
+
+    expect(useAgentStore.getState().currentAgentId).toBeNull();
   });
 
   it('preserves the selected daemon route across a post-mutation refresh', async () => {

@@ -46,6 +46,7 @@ interface WorkspaceState extends WorkspacePrefs {
   agentId: string | null;
   boardItems: BoardItem[];
   loaded: boolean;
+  loadError: string | null;
   load: (agentId: string | null) => Promise<void>;
   addBoardItem: (type: BoardItemType) => Promise<string | null>;
   updateBoardItem: (id: string, patch: Partial<BoardItem>) => void;
@@ -69,16 +70,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   agentId: null,
   boardItems: [],
   loaded: false,
+  loadError: null,
   load: async (agentId) => {
-    if (!agentId) { set({ agentId: null, boardItems: [], loaded: true, ...DEFAULT_PREFS }); return; }
+    if (!agentId) { set({ agentId: null, boardItems: [], loaded: true, loadError: null, ...DEFAULT_PREFS }); return; }
     const prefs = loadPrefs(agentId);
-    set({ agentId, boardItems: [], loaded: false, ...prefs });
+    set({ agentId, boardItems: [], loaded: false, loadError: null, ...prefs });
     try {
       const boardItems = await fetchBoardItems(agentId);
-      if (get().agentId === agentId) set({ boardItems, loaded: true });
+      if (get().agentId === agentId) set({ boardItems, loaded: true, loadError: null });
     } catch (error) {
       console.error('Failed to load workspace resources:', error);
-      if (get().agentId === agentId) set({ loaded: true });
+      if (get().agentId === agentId) set({
+        boardItems: [],
+        loaded: false,
+        loadError: error instanceof Error ? error.message : 'Workspace resource loading failed',
+      });
     }
   },
   addBoardItem: async (type) => {

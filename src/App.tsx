@@ -35,6 +35,8 @@ export default function App() {
   const isMobile = useIsMobile();
   const [authChecked, setAuthChecked] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [authUnavailable, setAuthUnavailable] = useState(false);
+  const [authRetryToken, setAuthRetryToken] = useState(0);
   const [routeAgentId, setRouteAgentId] = useState(() => getAgentIdFromPath(window.location.pathname));
 
   const loadItems = useWorkspaceStore((s) => s.load);
@@ -47,11 +49,18 @@ export default function App() {
       const status = await checkAuth();
       if (cancelled) return;
 
+      if (status === 'unavailable') {
+        setAuthUnavailable(true);
+        setAuthChecked(true);
+        return;
+      }
+
       if (status === 'unauthenticated') {
         resetAgents();
         resetCapabilities();
         await loadItems(null);
         setNeedsAuth(true);
+        setAuthUnavailable(false);
         setAuthChecked(true);
         return;
       }
@@ -63,6 +72,7 @@ export default function App() {
       if (cancelled) return;
 
       setNeedsAuth(false);
+      setAuthUnavailable(false);
       setRouteAgentId(preferredAgentId);
       setAuthChecked(true);
     };
@@ -71,7 +81,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [checkInit, loadCapabilities, loadItems, loadRelays, resetAgents, resetCapabilities]);
+  }, [authRetryToken, checkInit, loadCapabilities, loadItems, loadRelays, resetAgents, resetCapabilities]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -135,6 +145,22 @@ export default function App() {
   }, [boardRefreshToken, clearPty, currentAgentId, loadItems, replaceSessions, setPtyConnected]);
 
   if (!authChecked) return null;
+  if (authUnavailable) {
+    return (
+      <div className="flex h-full items-center justify-center bg-canvas-bg px-6 text-canvas-text">
+        <div role="alert" className="max-w-sm rounded border border-red-500/40 bg-canvas-surface p-5 text-center">
+          <div className="text-sm font-semibold">Authentication service unavailable</div>
+          <div className="mt-2 text-xs text-canvas-muted">The server did not provide an authoritative authentication result.</div>
+          <button
+            className="mt-4 rounded border border-canvas-accent px-3 py-1.5 text-xs text-canvas-accent"
+            onClick={() => { setAuthChecked(false); setAuthUnavailable(false); setAuthRetryToken((value) => value + 1); }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (needsAuth) {
     return (
       <LoginPage

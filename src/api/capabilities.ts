@@ -2,10 +2,8 @@ import { authFetch } from './client';
 
 export interface Capabilities {
   transport: string;
-  agentMutation: boolean;
   passwordChange: boolean;
   clientCertManagement: boolean;
-  directAgents: boolean;
   relayRoutes: boolean;
   relayMutation: boolean;
   files: boolean;
@@ -15,10 +13,8 @@ export interface Capabilities {
 
 export const CLOSED_CAPABILITIES: Capabilities = {
   transport: 'unavailable',
-  agentMutation: false,
   passwordChange: false,
   clientCertManagement: false,
-  directAgents: false,
   relayRoutes: false,
   relayMutation: false,
   files: false,
@@ -42,10 +38,8 @@ export function parseCapabilities(payload: unknown): Capabilities {
 
   return {
     transport,
-    agentMutation: booleanCapability(raw, 'agent_mutation', false),
     passwordChange: booleanCapability(raw, 'password_change', false),
     clientCertManagement: booleanCapability(raw, 'client_cert_management', false),
-    directAgents: booleanCapability(raw, 'direct_agents', false),
     relayRoutes: booleanCapability(raw, 'relay_routes', false),
     relayMutation: booleanCapability(raw, 'relay_mutation', false),
     files: booleanCapability(raw, 'files', false),

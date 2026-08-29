@@ -10,7 +10,7 @@ export function getRunningAiAgent(processes?: ProcessInfo[]): AiAgent {
   return ai ? (ai.cmd as AiAgent) : null;
 }
 
-export type ProcessStatus = 'ai-busy' | 'ai-idle' | 'busy' | 'idle' | 'dead';
+export type ProcessStatus = 'ai-busy' | 'ai-idle' | 'busy' | 'idle' | 'dead' | 'unknown';
 
 export const PROCESS_STATUS_THEME: Record<
   ProcessStatus,
@@ -39,11 +39,16 @@ export const PROCESS_STATUS_THEME: Record<
     dotClass: 'bg-neutral-500',
     borderClass: 'border-canvas-border',
   },
+  'unknown': {
+    dotClass: 'bg-neutral-500',
+    borderClass: 'border-canvas-border',
+  },
 };
 
-/** Determine status using aiStatus from hooks (preferred) + process list fallback */
+/** Determine status only from authoritative liveness, process, and hook state. */
 export function getProcessStatus(alive?: boolean, processes?: ProcessInfo[], aiStatus?: string): ProcessStatus {
-  if (!alive) return 'dead';
+  if (alive === false) return 'dead';
+  if (alive !== true || processes === undefined) return 'unknown';
 
   const ai = processes?.find((p) => AI_COMMANDS.has(p.cmd));
 
@@ -53,9 +58,8 @@ export function getProcessStatus(alive?: boolean, processes?: ProcessInfo[], aiS
     return 'ai-busy'; // "working", "tool:Bash", etc.
   }
 
-  // Fallback to process-based detection
-  if (ai) return 'ai-idle'; // AI running but no hook status = assume idle
-  if (processes && processes.length > 0) return 'busy';
+  if (ai) return 'unknown';
+  if (processes.length > 0) return 'busy';
   return 'idle';
 }
 

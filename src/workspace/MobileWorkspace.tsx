@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cable, FolderOpen, GripVertical, Keyboard, LayoutGrid, Lock, LogOut, Menu,
-  Minus, Pencil, Plus, RotateCw, Settings2, StickyNote, Terminal as TerminalIcon,
+  Minus, Pencil, Plus, RotateCw, StickyNote, Terminal as TerminalIcon,
   Trash2, User, Wrench, X,
 } from 'lucide-react';
 import { logout as logoutRequest } from '../api/auth';
 import { createPty, killPty } from '../api/pty';
-import MobileConnectionPanel from '../components/MobileConnectionPanel';
 import {
   MobileAccountPanel, MobileAuthPanel, MobileVisualPanel,
 } from '../components/MobileSettingsPanel';
@@ -68,12 +67,17 @@ function EntryIcon({ entry, size = 24 }: { entry: MobileEntry; size?: number }) 
   }
 
   const meta = getTerminalStatusMeta(entry.session.alive, entry.session.processes, entry.session.ai_status);
+  const aiIconClass = meta.status === 'ai-busy'
+    ? 'animate-pulse text-orange-400'
+    : meta.status === 'ai-idle'
+      ? 'text-green-400'
+      : 'text-canvas-muted';
   return (
     <div className={`relative flex shrink-0 items-center justify-center rounded-lg border bg-canvas-surface ${PROCESS_STATUS_THEME[meta.status].borderClass}`} style={{ width: size * 2, height: size * 2 }}>
       {meta.aiAgent === 'claude'
-        ? <ClaudeIcon size={size} className={meta.status === 'ai-busy' ? 'animate-pulse text-orange-400' : 'text-green-400'} />
+        ? <ClaudeIcon size={size} className={aiIconClass} />
         : meta.aiAgent === 'codex'
-          ? <CodexIcon size={size} className={meta.status === 'ai-busy' ? 'animate-pulse text-orange-400' : 'text-green-400'} />
+          ? <CodexIcon size={size} className={aiIconClass} />
           : <TerminalIcon size={size} className="text-canvas-accent" />}
       <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-canvas-bg ${PROCESS_STATUS_THEME[meta.status].dotClass}`} />
     </div>
@@ -112,6 +116,8 @@ export default function MobileWorkspace() {
   const relayError = useAgentStore((state) => state.discoveryError);
   const loadRelays = useAgentStore((state) => state.loadRelays);
   const capabilitiesError = useCapabilitiesStore((state) => state.error);
+  const workspaceError = useWorkspaceStore((state) => state.loadError);
+  const loadItems = useWorkspaceStore((state) => state.load);
   const loadCapabilities = useCapabilitiesStore((state) => state.load);
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
@@ -139,7 +145,6 @@ export default function MobileWorkspace() {
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [connectionOpen, setConnectionOpen] = useState(false);
   const [visualOpen, setVisualOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -260,7 +265,6 @@ export default function MobileWorkspace() {
           {agentMenuOpen && <><button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" /><div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[240px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface py-1 shadow-lg">{relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}><div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted"><span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{relay.name}</span><span className="font-normal normal-case">{relayStateLabel(relay)}</span>{canAdministerRelays && <><button className="rounded p-0.5 hover:bg-canvas-border" onClick={() => { setRelayEditor({ relay, deleting: false }); setAgentMenuOpen(false); }} title={`Edit ${relay.name}`}><Pencil size={11} /></button><button className="rounded p-0.5 text-red-400 hover:bg-red-500/10" onClick={() => { setRelayEditor({ relay, deleting: true }); setAgentMenuOpen(false); }} title={`Delete ${relay.name}`}><Trash2 size={11} /></button></>}</div>{relay.machines.map((machine) => { const agent = agentById.get(machine.id); if (!agent) return null; return <button key={agent.id} disabled={!relayCanConnect(relay) || !machine.online} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className={`flex w-full items-center gap-2 px-5 py-2 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''} ${!machine.online ? 'opacity-60' : ''}`}><span className={`h-1.5 w-1.5 rounded-full ${machine.online ? 'bg-emerald-500' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{agent.name}</span>{!machine.online && <span className="text-[9px]">offline</span>}</button>; })}{relay.machines.length === 0 && <div className="px-5 py-2 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}</div>)}{canAdministerRelays && <button onClick={() => { setRelayEditor({ relay: null, deleting: false }); setAgentMenuOpen(false); }} className="mt-1 flex w-full items-center gap-2 border-t border-canvas-border px-3 py-2 text-xs font-semibold text-canvas-accent hover:bg-canvas-border"><Plus size={14} />Add relay</button>}</div></>}
         </div>
         <button onClick={() => setKeyboardVisible(!keyboardVisible)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Touch keyboard"><Keyboard size={16} className={keyboardVisible ? 'text-canvas-accent' : 'text-canvas-muted'} /></button>
-        {management.connections && <button onClick={() => setConnectionOpen(true)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Connections"><Settings2 size={16} className="text-canvas-muted" /></button>}
         <button onClick={toggleDragMode} className={`shrink-0 rounded p-1 ${dragMode ? 'bg-canvas-accent/20 ring-1 ring-canvas-accent' : 'hover:bg-canvas-border'}`} title="Reorder icons"><GripVertical size={16} className={dragMode ? 'text-canvas-accent' : 'text-canvas-muted'} /></button>
         <button onClick={toggleDeleteMode} className={`shrink-0 rounded p-1 ${deleteMode ? 'bg-red-500/20 ring-1 ring-red-500' : 'hover:bg-canvas-border'}`} title="Delete mode"><Trash2 size={16} className={deleteMode ? 'text-red-400' : 'text-canvas-muted'} /></button>
         <span className="min-w-0 flex-1" />
@@ -276,7 +280,7 @@ export default function MobileWorkspace() {
           </div><div className="my-1 h-px bg-canvas-border" /><button onClick={() => { setLogoutOpen(true); setMenuOpen(false); }} className="flex w-full items-center gap-2 rounded px-2 py-2 text-canvas-muted hover:bg-canvas-border"><LogOut size={16} /><span className="text-xs">Logout</span></button>
         </div></>}
       </header>
-      <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities()])} />
+      <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} workspaceError={workspaceError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities(), loadItems(currentAgentId)])} />
 
       <main className="relative min-h-0 flex-1">
         {!activeEntry ? <div className="h-full overflow-y-auto p-3" style={{ paddingBottom: TAB_HEIGHT + 12 }} data-mobile-canvas>
@@ -305,7 +309,6 @@ export default function MobileWorkspace() {
       {contextEntry && <><button className="fixed inset-0 z-[80]" onClick={() => setContextEntry(null)} aria-label="Close item menu" /><div className="fixed bottom-12 left-3 right-3 z-[81] rounded-xl border border-canvas-border bg-canvas-surface p-1 shadow-xl"><button onClick={() => { setRenamingEntry(contextEntry); setRenameValue(mobileEntryTitle(contextEntry)); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs hover:bg-canvas-border"><Pencil size={14} />Rename</button><button onClick={() => { setDeleteEntry(contextEntry); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={14} />Delete</button></div></>}
       {renamingEntry && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4"><div className="w-full max-w-xs rounded-xl border border-canvas-border bg-canvas-surface p-4"><div className="mb-3 text-sm font-semibold">Rename</div><input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void commitRename(); if (event.key === 'Escape') setRenamingEntry(null); }} className="w-full rounded border border-canvas-border bg-canvas-bg px-3 py-2 text-xs outline-none focus:border-canvas-accent" /><div className="mt-3 flex justify-end gap-2"><button onClick={() => setRenamingEntry(null)} className="rounded border border-canvas-border px-3 py-1.5 text-xs">Cancel</button><button onClick={() => void commitRename()} className="rounded border border-canvas-accent bg-canvas-accent/20 px-3 py-1.5 text-xs text-canvas-accent">Save</button></div></div></div>}
 
-      {management.connections && <MobileConnectionPanel open={connectionOpen} onClose={() => setConnectionOpen(false)} />}
       <MobileVisualPanel open={visualOpen} onClose={() => setVisualOpen(false)} />
       {management.account && <MobileAccountPanel open={accountOpen} onClose={() => setAccountOpen(false)} />}
       {management.clientCertificates && <MobileAuthPanel open={authOpen} onClose={() => setAuthOpen(false)} />}

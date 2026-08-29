@@ -19,17 +19,23 @@ export async function login(username: string, password: string): Promise<{ ok: b
   }
 }
 
-/** Returns 'authenticated' | 'no-auth-required' | 'unauthenticated' */
-export async function checkAuth(): Promise<'authenticated' | 'no-auth-required' | 'unauthenticated'> {
+export type AuthStatus = 'authenticated' | 'no-auth-required' | 'unauthenticated' | 'unavailable';
+
+export async function checkAuth(): Promise<AuthStatus> {
   try {
     const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
-    if (!res.ok) return 'unauthenticated';
-    const data = await res.json();
-    if (!data.auth_required) return 'no-auth-required';
+    if (res.status === 401 || res.status === 403) return 'unauthenticated';
+    if (!res.ok) return 'unavailable';
+    const data: unknown = await res.json();
+    if (!data || typeof data !== 'object' || typeof (data as Record<string, unknown>).auth_required !== 'boolean') {
+      return 'unavailable';
+    }
+    if (!(data as Record<string, unknown>).auth_required) return 'no-auth-required';
     const check = await authFetch('/api/relays');
-    return check.ok ? 'authenticated' : 'unauthenticated';
+    if (check.ok) return 'authenticated';
+    return check.status === 401 || check.status === 403 ? 'unauthenticated' : 'unavailable';
   } catch {
-    return 'unauthenticated';
+    return 'unavailable';
   }
 }
 

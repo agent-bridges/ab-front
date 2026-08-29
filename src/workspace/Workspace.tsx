@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownUp, Cable, ChevronDown, ChevronRight, Columns2, FolderOpen, Keyboard,
-  LayoutGrid, Menu, Pencil, Plus, Settings2, StickyNote, Terminal as TerminalIcon,
+  LayoutGrid, Menu, Pencil, Plus, StickyNote, Terminal as TerminalIcon,
   Trash2, Wrench, X,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
@@ -10,7 +10,6 @@ import { usePtyStore } from '../stores/ptyStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { createPty, killPty } from '../api/pty';
-import ConnectionSettingsModal from '../components/ConnectionSettingsModal';
 import SettingsModal from '../components/SettingsModal';
 import ConfirmDialog from '../components/dialogs/ConfirmDialog';
 import type { BoardItemType, IdeGroupLayout } from '../types';
@@ -126,6 +125,8 @@ export default function Workspace() {
   const relayError = useAgentStore((state) => state.discoveryError);
   const loadRelays = useAgentStore((state) => state.loadRelays);
   const capabilitiesError = useCapabilitiesStore((state) => state.error);
+  const workspaceError = useWorkspaceStore((state) => state.loadError);
+  const loadItems = useWorkspaceStore((state) => state.load);
   const loadCapabilities = useCapabilitiesStore((state) => state.load);
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
@@ -157,7 +158,6 @@ export default function Workspace() {
 
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [relayEditor, setRelayEditor] = useState<{ relay: Relay | null; deleting: boolean } | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
@@ -288,10 +288,9 @@ export default function Workspace() {
       <span className="flex-1" />
       <button disabled={tabs.filter((id) => entryMap.has(id)).length < 2} className="rounded p-1.5 hover:bg-canvas-border disabled:opacity-30" onClick={() => createGroup(tabs.filter((id) => entryMap.has(id)))} title="Group open tabs"><Columns2 size={15} /></button>
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setKeyboardVisible(!keyboardVisible)} title="Touch keyboard"><Keyboard size={15} /></button>
-      {management.connections && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setConnectionsOpen(true)} title="Connections"><Settings2 size={15} /></button>}
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setSettingsOpen(true)} title="Settings"><Wrench size={15} /></button>
     </header>
-    <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities()])} />
+    <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} workspaceError={workspaceError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities(), loadItems(currentAgentId)])} />
     <div className="relative flex min-h-0 flex-1">
       {sidebarOpen && sidebar}
       {isMobile && sidebarOpen && <button className="fixed inset-0 top-10 z-40 bg-black/50" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar" />}
@@ -316,7 +315,6 @@ export default function Workspace() {
         </div>
       </main>
     </div>
-    {management.connections && <ConnectionSettingsModal open={connectionsOpen} onClose={() => setConnectionsOpen(false)} />}
     {canAdministerRelays && <RelayAdminModal open={relayEditor !== null} relay={relayEditor?.relay || null} revision={relayRevision} confirmDeleteOnOpen={relayEditor?.deleting} onClose={() => setRelayEditor(null)} onChanged={() => loadRelays(currentAgentId)} />}
     <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     <ConfirmDialog open={!!deleteEntry} title={deleteEntry?.kind === 'session' ? `Kill "${deleteEntry.session.name}"?` : `Delete "${deleteEntry?.item.label}"?`} message={deleteEntry?.kind === 'session' ? 'This terminates the live PTY session.' : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />

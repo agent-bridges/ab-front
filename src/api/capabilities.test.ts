@@ -21,16 +21,13 @@ describe('capability discovery', () => {
 
     await expect(fetchCapabilities()).rejects.toThrow('network unavailable');
     expect(managementEntrypointsForCapabilities(CLOSED_CAPABILITIES)).toEqual({
-      connections: false,
       account: false,
       clientCertificates: false,
       relayAdministration: false,
     });
     expect(CLOSED_CAPABILITIES).toMatchObject({
-      agentMutation: false,
       passwordChange: false,
       clientCertManagement: false,
-      directAgents: false,
       relayRoutes: false,
       relayMutation: false,
       files: false,
@@ -53,7 +50,6 @@ describe('capability discovery', () => {
     });
 
     expect(managementEntrypointsForCapabilities(capabilities)).toEqual({
-      connections: false,
       account: false,
       clientCertificates: false,
       relayAdministration: false,
@@ -70,5 +66,15 @@ describe('capability discovery', () => {
 
     expect(capabilities.passwordChange).toBe(false);
     expect(capabilities.clientCertManagement).toBe(false);
+  });
+
+  it('does not expose legacy direct-agent management even if a server advertises it', () => {
+    const management = managementEntrypointsForCapabilities(parseCapabilities({
+      transport: 'relay_core',
+      agent_mutation: true,
+      direct_agents: true,
+    }));
+
+    expect(management).not.toHaveProperty('connections');
   });
 });

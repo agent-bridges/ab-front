@@ -7,7 +7,7 @@ import ConfirmDialog from '../dialogs/ConfirmDialog';
 
 /**
  * Singleton workspace view — GUI for the host-side `tu` SSH-tunnel script.
- * Reads from /api/agents/{id}/tunnels (proxied by ab-back to ab-pty's
+ * Reads from the core route adapter at /api/agents/{id}/tunnels (forwarded to ab-pty's
  * /api/tunnels which shells out to /lxd-exch/system/tu). Provides:
  *   - refresh (also driven by the Window toolbar's "ab-tunnels-refresh" event)
  *   - create-tunnel modal (local + public ports)

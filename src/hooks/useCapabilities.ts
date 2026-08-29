@@ -4,7 +4,6 @@ import { useCapabilitiesStore } from '../stores/capabilitiesStore';
 export type SettingsSection = 'visual' | 'account' | 'auth';
 
 export interface ManagementEntrypoints {
-  connections: boolean;
   account: boolean;
   clientCertificates: boolean;
   relayAdministration: boolean;
@@ -12,7 +11,6 @@ export interface ManagementEntrypoints {
 
 export function managementEntrypointsForCapabilities(capabilities: Capabilities): ManagementEntrypoints {
   return {
-    connections: capabilities.agentMutation,
     account: capabilities.passwordChange,
     clientCertificates: capabilities.clientCertManagement,
     relayAdministration: capabilities.relayMutation,

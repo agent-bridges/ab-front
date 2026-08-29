@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Agent, Relay } from '../types';
 import { fetchRelays } from '../api/relays';
-import { flattenRelayMachines, relayCanConnect } from '../utils/agentDisplay';
+import { flattenRelayMachines } from '../utils/agentDisplay';
 
 interface AgentState {
   agents: Agent[];
@@ -43,20 +43,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const discovery = await fetchRelays();
       const { relays } = discovery;
       const agents = flattenRelayMachines(relays);
-      const connectableIds = new Set(relays
-        .filter(relayCanConnect)
-        .flatMap((relay) => relay.machines.filter((machine) => machine.online).map((machine) => machine.id)));
       const state = get();
-      const preferredExists =
-        preferredAgentId && connectableIds.has(preferredAgentId)
-          ? preferredAgentId
-          : null;
+      const routeIds = new Set(agents.map((agent) => agent.id));
+      const preferredExists = preferredAgentId && routeIds.has(preferredAgentId)
+        ? preferredAgentId
+        : null;
       const nextCurrentAgentId =
         preferredExists ||
-        (state.currentAgentId && connectableIds.has(state.currentAgentId)
+        (state.currentAgentId && routeIds.has(state.currentAgentId)
           ? state.currentAgentId
-          : null) ||
-        agents.find((agent) => connectableIds.has(agent.id))?.id || null;
+          : null);
       set({
         agents,
         relays,
