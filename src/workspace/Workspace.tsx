@@ -20,6 +20,9 @@ import DesktopEntryPane, {
   WorkspaceEntryIcon as EntryIcon,
 } from './DesktopEntryPane';
 import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/useCapabilities';
+import { agentDisplayLabel, relayCanConnect, relayStateLabel } from '../utils/agentDisplay';
+import { useCapabilitiesStore } from '../stores/capabilitiesStore';
+import DiscoveryErrorBanner from '../components/DiscoveryErrorBanner';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -108,6 +111,11 @@ export default function Workspace() {
   const capabilities = useCapabilities();
   const management = managementEntrypointsForCapabilities(capabilities);
   const agents = useAgentStore((state) => state.agents);
+  const relays = useAgentStore((state) => state.relays);
+  const relayError = useAgentStore((state) => state.discoveryError);
+  const loadRelays = useAgentStore((state) => state.loadRelays);
+  const capabilitiesError = useCapabilitiesStore((state) => state.error);
+  const loadCapabilities = useCapabilitiesStore((state) => state.load);
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
   const sessionsById = usePtyStore((state) => state.sessionsById);
@@ -142,6 +150,7 @@ export default function Workspace() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
+  const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const autoOpenedAgentsRef = useRef<Set<string>>(new Set());
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('ab:workspace:expanded-agents') || '[]') as string[]); }
@@ -209,13 +218,21 @@ export default function Workspace() {
         {isMobile && <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSidebarOpen(false)}><X size={14} /></button>}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {agents.map((agent) => {
+        {relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}>
+          <div className="flex min-h-7 items-center gap-2 px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted">
+            <span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} />
+            <span className="min-w-0 flex-1 truncate">{relay.name}</span>
+            <span className="font-normal normal-case">{relayStateLabel(relay)}</span>
+          </div>
+          {relay.machines.map((machine) => {
+          const agent = agentById.get(machine.id);
+          if (!agent) return null;
           const current = agent.id === currentAgentId;
           const expanded = expandedAgents.has(agent.id);
           return <div key={agent.id}>
-            <button className={`flex h-7 w-full items-center gap-1 px-2 text-left text-xs hover:bg-canvas-border ${current ? 'text-canvas-accent' : 'text-canvas-text'}`}
+            <button disabled={!relayCanConnect(relay) || !machine.online} className={`flex h-7 w-full items-center gap-1 pl-5 pr-2 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${current ? 'text-canvas-accent' : 'text-canvas-text'} ${!machine.online ? 'opacity-60' : ''}`}
               onClick={() => { setExpandedAgents((set) => { const next = new Set(set); expanded ? next.delete(agent.id) : next.add(agent.id); return next; }); if (!current) setCurrentAgent(agent.id); }}>
-              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className={`h-1.5 w-1.5 rounded-full ${current && connected ? 'bg-green-400' : 'bg-canvas-muted'}`} /><span className="truncate font-medium">{agent.name}</span>
+              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className={`h-1.5 w-1.5 rounded-full ${current && connected ? 'bg-green-400' : machine.online ? 'bg-emerald-500/70' : 'bg-canvas-muted'}`} /><span className="truncate font-medium">{agent.name}</span>{!machine.online && <span className="ml-auto text-[9px] text-canvas-muted">offline</span>}
             </button>
             {expanded && current && <div className="ml-3 border-l border-canvas-border pl-1">
               {visibleEntries.map((entry) => <div key={entry.key} className={`group flex min-h-7 items-center gap-2 rounded px-2 text-xs hover:bg-canvas-border ${focusedItemId === entry.key ? 'bg-canvas-accent/15 text-canvas-accent' : 'text-canvas-text'}`}>
@@ -228,7 +245,9 @@ export default function Workspace() {
               {visibleEntries.length === 0 && <div className="px-3 py-2 text-[11px] text-canvas-muted">No matching entries</div>}
             </div>}
           </div>;
-        })}
+          })}
+          {relay.machines.length === 0 && <div className="px-5 py-1.5 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}
+        </div>)}
       </div>
       {!isMobile && <div className="absolute inset-y-0 -right-1 w-2 cursor-col-resize" onPointerDown={(event) => { resizeRef.current = { x: event.clientX, width: sidebarWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (resizeRef.current) setSidebarWidth(resizeRef.current.width + event.clientX - resizeRef.current.x); }} onPointerUp={() => { resizeRef.current = null; }} />}
     </aside>
@@ -237,17 +256,28 @@ export default function Workspace() {
   return <div className="flex h-full min-h-0 flex-col bg-canvas-bg text-canvas-text">
     <header className="flex h-10 shrink-0 items-center gap-1 border-b border-canvas-border bg-canvas-surface px-2">
       {isMobile && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setSidebarOpen(true)}><Menu size={16} /></button>}
-      <select value={currentAgentId || ''} onChange={(event) => setCurrentAgent(event.target.value)} className="max-w-48 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs"><option value="" disabled>Agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select>
-      <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void newTerminal()} title="New terminal"><TerminalIcon size={15} /></button>
-      <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void addResource('filebrowser')} title="Open files"><FolderOpen size={15} /></button>
-      <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void addResource('notes')} title="New note"><StickyNote size={15} /></button>
-      <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void addResource('tunnels')} title="Open tunnels"><Cable size={15} /></button>
+      <select value={currentAgentId || ''} onChange={(event) => setCurrentAgent(event.target.value)} className="max-w-56 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs">
+        <option value="" disabled>Agent</option>
+        {relays.map((relay) => <optgroup key={relay.id} label={`${relay.name} — ${relayStateLabel(relay)}`}>
+          {relay.machines.length === 0
+            ? <option disabled value={`${relay.id}:empty`}>No machines</option>
+            : relay.machines.map((machine) => {
+              const agent = agentById.get(machine.id);
+              return <option key={machine.id} value={machine.id} disabled={!relayCanConnect(relay) || !machine.online}>{agent ? agentDisplayLabel(agent) : machine.name}{!machine.online ? ' — offline' : ''}</option>;
+            })}
+        </optgroup>)}
+      </select>
+      {capabilities.relayRoutes && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void newTerminal()} title="New terminal"><TerminalIcon size={15} /></button>}
+      {capabilities.files && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void addResource('filebrowser')} title="Open files"><FolderOpen size={15} /></button>}
+      {capabilities.canvas && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void addResource('notes')} title="New note"><StickyNote size={15} /></button>}
+      {capabilities.tunnels && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void addResource('tunnels')} title="Open tunnels"><Cable size={15} /></button>}
       <span className="flex-1" />
       <button disabled={tabs.filter((id) => entryMap.has(id)).length < 2} className="rounded p-1.5 hover:bg-canvas-border disabled:opacity-30" onClick={() => createGroup(tabs.filter((id) => entryMap.has(id)))} title="Group open tabs"><Columns2 size={15} /></button>
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setKeyboardVisible(!keyboardVisible)} title="Touch keyboard"><Keyboard size={15} /></button>
       {management.connections && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setConnectionsOpen(true)} title="Connections"><Settings2 size={15} /></button>}
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setSettingsOpen(true)} title="Settings"><Wrench size={15} /></button>
     </header>
+    <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities()])} />
     <div className="relative flex min-h-0 flex-1">
       {sidebarOpen && sidebar}
       {isMobile && sidebarOpen && <button className="fixed inset-0 top-10 z-40 bg-black/50" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar" />}
@@ -268,7 +298,7 @@ export default function Workspace() {
               <button onClick={() => deleteGroup(focusedGroup.id)} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Trash2 size={12} /></button>
             </div>
             <GroupBody entries={focusedGroup.members.flatMap((id) => { const entry = entryMap.get(id); return entry ? [entry] : []; })} layout={focusedGroup.layout} onHide={(entry) => removeGroupMember(focusedGroup.id, entry.key)} onDelete={setDeleteEntry} />
-          </> : <div className="flex flex-1 items-center justify-center text-sm text-canvas-muted"><div className="text-center"><TerminalIcon size={30} className="mx-auto mb-3 opacity-40" /><div>Select a session from the workspace tree.</div><button className="mt-3 rounded border border-canvas-border px-3 py-1.5 text-xs hover:bg-canvas-border" onClick={() => void newTerminal()}><Plus size={12} className="mr-1 inline" />New terminal</button></div></div>}
+          </> : <div className="flex flex-1 items-center justify-center text-sm text-canvas-muted"><div className="text-center"><TerminalIcon size={30} className="mx-auto mb-3 opacity-40" /><div>Select a session from the workspace tree.</div>{capabilities.relayRoutes && <button className="mt-3 rounded border border-canvas-border px-3 py-1.5 text-xs hover:bg-canvas-border" onClick={() => void newTerminal()}><Plus size={12} className="mr-1 inline" />New terminal</button>}</div></div>}
         </div>
       </main>
     </div>

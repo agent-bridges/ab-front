@@ -24,7 +24,7 @@ interface FormState {
 const EMPTY: FormState = { name: '', ip: '', jwt_key: '' };
 
 export default function MobileConnectionPanel({ open, onClose }: Props) {
-  const { agents, loadAgents, setCurrentAgent, refreshCurrentAgentBoard } = useAgentStore();
+  const { agents, loadRelays, setCurrentAgent, refreshCurrentAgentBoard } = useAgentStore();
   const [editId, setEditId] = useState<string | 'new' | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -59,11 +59,11 @@ export default function MobileConnectionPanel({ open, onClose }: Props) {
     try {
       if (editId === 'new') {
         const created = await createAgent({ name: form.name.trim(), ip: form.ip.trim(), jwt_key: form.jwt_key.trim() });
-        await loadAgents();
+        await loadRelays();
         if (created?.id) setCurrentAgent(created.id);
       } else if (editId) {
         await updateAgent(editId, { name: form.name.trim(), ip: form.ip.trim(), jwt_key: form.jwt_key.trim() });
-        await loadAgents();
+        await loadRelays();
         refreshCurrentAgentBoard();
       }
       setEditId(null);
@@ -90,7 +90,7 @@ export default function MobileConnectionPanel({ open, onClose }: Props) {
 
   const handleDelete = async (id: string) => {
     await deleteAgent(id);
-    await loadAgents();
+    await loadRelays();
     setEditId(null);
   };
 

@@ -38,7 +38,7 @@ function normalizeForm(detail: AgentDetail): ConnectionFormState {
 }
 
 export default function ConnectionSettingsModal({ open, onClose }: ConnectionSettingsModalProps) {
-  const { agents, currentAgentId, setCurrentAgent, refreshCurrentAgentBoard, loadAgents } = useAgentStore();
+  const { agents, currentAgentId, setCurrentAgent, refreshCurrentAgentBoard, loadRelays } = useAgentStore();
   const [selectedId, setSelectedId] = useState<string | 'new'>('new');
   const [selectedAgent, setSelectedAgent] = useState<AgentDetail | null>(null);
   const [form, setForm] = useState<ConnectionFormState>(EMPTY_FORM);
@@ -141,13 +141,13 @@ export default function ConnectionSettingsModal({ open, onClose }: ConnectionSet
     try {
       if (selectedId === 'new') {
         const created = await createAgent(payload);
-        await loadAgents();
+        await loadRelays();
         setCurrentAgent(created.id);
         setSelectedId(created.id);
         setStatus(`Connection "${created.name}" created.`);
       } else {
         await updateAgent(selectedId, payload);
-        await loadAgents();
+        await loadRelays();
         setSelectedId(selectedId);
         if (currentAgentId === selectedId) {
           refreshCurrentAgentBoard();
@@ -170,7 +170,7 @@ export default function ConnectionSettingsModal({ open, onClose }: ConnectionSet
     try {
       const label = selectedAgent?.name || selectedSummary?.name || 'this connection';
       await deleteAgent(selectedId);
-      await loadAgents();
+      await loadRelays();
       const nextId = useAgentStore.getState().agents.find((agent) => agent.id !== selectedId)?.id || 'new';
       setSelectedId(nextId);
       if (nextId === 'new') {

@@ -1,23 +1,33 @@
 import { create } from 'zustand';
 import {
   fetchCapabilities,
-  LEGACY_CAPABILITIES,
+  CLOSED_CAPABILITIES,
   type Capabilities,
 } from '../api/capabilities';
 
 interface CapabilitiesState {
   capabilities: Capabilities;
   loaded: boolean;
+  error: string | null;
   load: () => Promise<void>;
   reset: () => void;
 }
 
 export const useCapabilitiesStore = create<CapabilitiesState>((set) => ({
-  capabilities: LEGACY_CAPABILITIES,
+  capabilities: CLOSED_CAPABILITIES,
   loaded: false,
+  error: null,
   load: async () => {
-    const capabilities = await fetchCapabilities();
-    set({ capabilities, loaded: true });
+    try {
+      const capabilities = await fetchCapabilities();
+      set({ capabilities, loaded: true, error: null });
+    } catch (error) {
+      set({
+        capabilities: CLOSED_CAPABILITIES,
+        loaded: true,
+        error: error instanceof Error ? error.message : 'Capability discovery failed',
+      });
+    }
   },
-  reset: () => set({ capabilities: LEGACY_CAPABILITIES, loaded: false }),
+  reset: () => set({ capabilities: CLOSED_CAPABILITIES, loaded: false, error: null }),
 }));

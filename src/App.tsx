@@ -23,7 +23,7 @@ function getBoardPath(agentId: string | null): string {
 }
 
 export default function App() {
-  const loadAgents = useAgentStore((s) => s.loadAgents);
+  const loadRelays = useAgentStore((s) => s.loadRelays);
   const resetAgents = useAgentStore((s) => s.reset);
   const agents = useAgentStore((s) => s.agents);
   const currentAgentId = useAgentStore((s) => s.currentAgentId);
@@ -43,27 +43,6 @@ export default function App() {
     let cancelled = false;
 
     const initAuth = async () => {
-      // mTLS gate: if Settings has "Require client cert" on, browsers must
-      // be on :5444 (the cert-enforcing port). The check runs over :5443
-      // (which is always open, the no-cert port), but we still get the
-      // setting because /api works on :5443. If required and we're on :5443,
-      // hard-redirect to :5444 with the same path/query/hash. :5443 stays
-      // available as the recovery channel — toggling required back off from
-      // there will let you back in if you ever lose the cert.
-      try {
-        if (window.location.port === '5443') {
-          const r = await fetch('/api/auth/client-cert/status', { cache: 'no-store' });
-          if (r.ok) {
-            const s = await r.json();
-            if (s.required) {
-              const target = `${window.location.protocol}//${window.location.hostname}:5444${window.location.pathname}${window.location.search}${window.location.hash}`;
-              window.location.replace(target);
-              return; // browser is leaving; nothing more to do.
-            }
-          }
-        }
-      } catch { /* network failures fall through to the normal flow */ }
-
       checkInit();
       const status = await checkAuth();
       if (cancelled) return;
@@ -80,7 +59,7 @@ export default function App() {
       const preferredAgentId = getAgentIdFromPath(window.location.pathname);
       resetAgents();
       await loadItems(null);
-      await Promise.all([loadCapabilities(), loadAgents(preferredAgentId)]);
+      await Promise.all([loadCapabilities(), loadRelays(preferredAgentId)]);
       if (cancelled) return;
 
       setNeedsAuth(false);
@@ -92,7 +71,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [checkInit, loadAgents, loadCapabilities, loadItems, resetAgents, resetCapabilities]);
+  }, [checkInit, loadCapabilities, loadItems, loadRelays, resetAgents, resetCapabilities]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -163,7 +142,7 @@ export default function App() {
           const preferredAgentId = getAgentIdFromPath(window.location.pathname);
           resetAgents();
           resetCapabilities();
-          void loadItems(null).then(() => Promise.all([loadCapabilities(), loadAgents(preferredAgentId)])).then(() => {
+          void loadItems(null).then(() => Promise.all([loadCapabilities(), loadRelays(preferredAgentId)])).then(() => {
             setNeedsAuth(false);
             setAuthChecked(true);
             setRouteAgentId(preferredAgentId);

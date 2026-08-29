@@ -1,60 +1,74 @@
 import { create } from 'zustand';
-import type { Agent } from '../types';
-import { fetchAgents } from '../api/agents';
+import type { Agent, Relay } from '../types';
+import { fetchRelays } from '../api/relays';
+import { flattenRelayMachines, relayCanConnect } from '../utils/agentDisplay';
 
 interface AgentState {
   agents: Agent[];
+  relays: Relay[];
   currentAgentId: string | null;
   boardRefreshToken: number;
   loading: boolean;
+  discoveryError: string | null;
   reset: () => void;
   setCurrentAgent: (id: string) => void;
   refreshCurrentAgentBoard: () => void;
-  loadAgents: (preferredAgentId?: string | null) => Promise<void>;
+  loadRelays: (preferredAgentId?: string | null) => Promise<void>;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
   agents: [],
+  relays: [],
   currentAgentId: null,
   boardRefreshToken: 0,
   loading: false,
+  discoveryError: null,
 
   reset: () => set({
     agents: [],
+    relays: [],
     currentAgentId: null,
     loading: false,
+    discoveryError: null,
   }),
   setCurrentAgent: (id) => set({ currentAgentId: id }),
   refreshCurrentAgentBoard: () => set((state) => ({ boardRefreshToken: state.boardRefreshToken + 1 })),
 
-  loadAgents: async (preferredAgentId) => {
-    set({ loading: true });
+  loadRelays: async (preferredAgentId) => {
+    set({ loading: true, discoveryError: null });
     try {
-      const raw = await fetchAgents();
-      // Sort alphabetically by name, case-insensitive, locale-aware
-      // (handles mixed Latin/Cyrillic names correctly).
-      const agents = [...raw].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-      );
+      const relays = await fetchRelays();
+      const agents = flattenRelayMachines(relays);
+      const connectableIds = new Set(relays
+        .filter(relayCanConnect)
+        .flatMap((relay) => relay.machines.filter((machine) => machine.online).map((machine) => machine.id)));
       const state = get();
       const preferredExists =
-        preferredAgentId && agents.some((agent) => agent.id === preferredAgentId)
+        preferredAgentId && connectableIds.has(preferredAgentId)
           ? preferredAgentId
           : null;
       const nextCurrentAgentId =
         preferredExists ||
-        (state.currentAgentId && agents.some((agent) => agent.id === state.currentAgentId)
+        (state.currentAgentId && connectableIds.has(state.currentAgentId)
           ? state.currentAgentId
           : null) ||
-        (agents.length > 0 ? agents[0].id : null);
+        agents.find((agent) => connectableIds.has(agent.id))?.id || null;
       set({
         agents,
+        relays,
         loading: false,
         currentAgentId: nextCurrentAgentId,
+        discoveryError: null,
       });
     } catch (e) {
-      console.error('Failed to load agents:', e);
-      set({ loading: false });
+      console.error('Failed to discover relays:', e);
+      set({
+        agents: [],
+        relays: [],
+        currentAgentId: null,
+        loading: false,
+        discoveryError: e instanceof Error ? e.message : 'Relay discovery failed',
+      });
     }
   },
 }));

@@ -26,7 +26,7 @@ export async function checkAuth(): Promise<'authenticated' | 'no-auth-required' 
     if (!res.ok) return 'unauthenticated';
     const data = await res.json();
     if (!data.auth_required) return 'no-auth-required';
-    const check = await authFetch('/api/agents');
+    const check = await authFetch('/api/relays');
     return check.ok ? 'authenticated' : 'unauthenticated';
   } catch {
     return 'unauthenticated';

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchCapabilities, LEGACY_CAPABILITIES, parseCapabilities } from './capabilities';
+import { CLOSED_CAPABILITIES, fetchCapabilities, parseCapabilities } from './capabilities';
 import {
   managementEntrypointsForCapabilities,
   settingsSectionsForCapabilities,
@@ -10,16 +10,31 @@ afterEach(() => {
 });
 
 describe('capability discovery', () => {
-  it('keeps every legacy management feature when the endpoint is missing', async () => {
+  it('fails closed when the endpoint is missing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 404 })));
 
-    await expect(fetchCapabilities()).resolves.toEqual(LEGACY_CAPABILITIES);
+    await expect(fetchCapabilities()).rejects.toThrow('Capability discovery failed (404)');
   });
 
-  it('keeps every legacy management feature when discovery is unavailable', async () => {
+  it('fails closed when discovery is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network unavailable')));
 
-    await expect(fetchCapabilities()).resolves.toEqual(LEGACY_CAPABILITIES);
+    await expect(fetchCapabilities()).rejects.toThrow('network unavailable');
+    expect(managementEntrypointsForCapabilities(CLOSED_CAPABILITIES)).toEqual({
+      connections: false,
+      account: false,
+      clientCertificates: false,
+    });
+    expect(CLOSED_CAPABILITIES).toMatchObject({
+      agentMutation: false,
+      passwordChange: false,
+      clientCertManagement: false,
+      directAgents: false,
+      relayRoutes: false,
+      files: false,
+      tunnels: false,
+      canvas: false,
+    });
   });
 
   it('honours explicit Rust false flags and removes all unsupported entrypoints', () => {

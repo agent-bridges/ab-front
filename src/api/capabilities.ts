@@ -12,16 +12,16 @@ export interface Capabilities {
   canvas: boolean;
 }
 
-export const LEGACY_CAPABILITIES: Capabilities = {
-  transport: 'legacy',
-  agentMutation: true,
-  passwordChange: true,
-  clientCertManagement: true,
-  directAgents: true,
+export const CLOSED_CAPABILITIES: Capabilities = {
+  transport: 'unavailable',
+  agentMutation: false,
+  passwordChange: false,
+  clientCertManagement: false,
+  directAgents: false,
   relayRoutes: false,
-  files: true,
-  tunnels: true,
-  canvas: true,
+  files: false,
+  tunnels: false,
+  canvas: false,
 };
 
 type CapabilityPayload = Record<string, unknown>;
@@ -32,37 +32,27 @@ function booleanCapability(payload: CapabilityPayload, key: string, fallback: bo
 
 export function parseCapabilities(payload: unknown): Capabilities {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return LEGACY_CAPABILITIES;
+    throw new Error('Capability discovery returned an invalid response');
   }
 
   const raw = payload as CapabilityPayload;
-  const transport = typeof raw.transport === 'string' ? raw.transport : 'legacy';
-  // Early ab-core-service builds only advertised agent_mutation. Treat omitted
-  // sensitive management features conservatively there; a legacy endpoint that
-  // does not exist is handled separately by fetchCapabilities() below.
-  const relayCoreDefault = transport === 'relay_core' ? false : true;
+  const transport = typeof raw.transport === 'string' ? raw.transport : 'unavailable';
 
   return {
     transport,
-    agentMutation: booleanCapability(raw, 'agent_mutation', relayCoreDefault),
-    passwordChange: booleanCapability(raw, 'password_change', relayCoreDefault),
-    clientCertManagement: booleanCapability(raw, 'client_cert_management', relayCoreDefault),
-    directAgents: booleanCapability(raw, 'direct_agents', relayCoreDefault),
+    agentMutation: booleanCapability(raw, 'agent_mutation', false),
+    passwordChange: booleanCapability(raw, 'password_change', false),
+    clientCertManagement: booleanCapability(raw, 'client_cert_management', false),
+    directAgents: booleanCapability(raw, 'direct_agents', false),
     relayRoutes: booleanCapability(raw, 'relay_routes', false),
-    files: booleanCapability(raw, 'files', true),
-    tunnels: booleanCapability(raw, 'tunnels', true),
-    canvas: booleanCapability(raw, 'canvas', true),
+    files: booleanCapability(raw, 'files', false),
+    tunnels: booleanCapability(raw, 'tunnels', false),
+    canvas: booleanCapability(raw, 'canvas', false),
   };
 }
 
 export async function fetchCapabilities(): Promise<Capabilities> {
-  try {
-    const response = await authFetch('/api/capabilities', { cache: 'no-store' });
-    if (!response.ok) return LEGACY_CAPABILITIES;
-    return parseCapabilities(await response.json());
-  } catch {
-    // ab-back predates capability discovery. Keeping all legacy controls is
-    // intentional when the endpoint is missing or cannot be reached.
-    return LEGACY_CAPABILITIES;
-  }
+  const response = await authFetch('/api/capabilities', { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Capability discovery failed (${response.status})`);
+  return parseCapabilities(await response.json());
 }

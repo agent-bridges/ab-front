@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const backendUrl = process.env.BACKEND_URL || 'http://localhost:8420';
+const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8720';
 
 function authGatePlugin(): Plugin {
   return {
@@ -21,7 +21,7 @@ function authGatePlugin(): Plugin {
         let isAuthorized = false;
         if (cookieHeader) {
           try {
-            const resp = await fetch(`${backendUrl}/api/agents`, {
+            const resp = await fetch(`${backendUrl}/api/relays`, {
               headers: { cookie: cookieHeader },
             });
             isAuthorized = resp.ok;

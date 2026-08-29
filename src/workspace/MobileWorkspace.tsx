@@ -25,6 +25,9 @@ import { usePtyStore } from '../stores/ptyStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import type { BoardItem, BoardItemType, PtySession } from '../types';
 import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/useCapabilities';
+import { agentDisplayLabel, relayCanConnect, relayStateLabel } from '../utils/agentDisplay';
+import { useCapabilitiesStore } from '../stores/capabilitiesStore';
+import DiscoveryErrorBanner from '../components/DiscoveryErrorBanner';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -102,6 +105,11 @@ export default function MobileWorkspace() {
   const capabilities = useCapabilities();
   const management = managementEntrypointsForCapabilities(capabilities);
   const agents = useAgentStore((state) => state.agents);
+  const relays = useAgentStore((state) => state.relays);
+  const relayError = useAgentStore((state) => state.discoveryError);
+  const loadRelays = useAgentStore((state) => state.loadRelays);
+  const capabilitiesError = useCapabilitiesStore((state) => state.error);
+  const loadCapabilities = useCapabilitiesStore((state) => state.load);
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
   const sessionsById = usePtyStore((state) => state.sessionsById);
@@ -227,16 +235,25 @@ export default function MobileWorkspace() {
   const toggleDragMode = () => { setDragMode((value) => !value); setDeleteMode(false); setDraggingKey(null); };
   const toggleDeleteMode = () => { setDeleteMode((value) => !value); setDragMode(false); setDraggingKey(null); };
   const currentAgent = agents.find((agent) => agent.id === currentAgentId);
+  const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const canCreate = capabilities.relayRoutes || capabilities.files || capabilities.canvas || capabilities.tunnels;
+  const supportsCreateType = (type: string) => type === 'terminal'
+    ? capabilities.relayRoutes
+    : type === 'filebrowser'
+      ? capabilities.files
+      : type === 'notes'
+        ? capabilities.canvas
+        : capabilities.tunnels;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas-bg text-canvas-text" data-mobile-workspace>
       <header className="relative z-[60] flex h-10 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3">
         <button className="shrink-0 rounded p-0.5 hover:bg-canvas-border" title="Agent Bridge"><img src="/favicon.svg" alt="Agent Bridge" className="h-5 w-5" /></button>
         <div className="relative min-w-0 shrink">
-          <button onClick={() => setAgentMenuOpen((value) => !value)} className="flex max-w-28 items-center gap-1 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs">
-            <span className="truncate">{currentAgent?.name || 'Select'}</span><span className="text-canvas-muted">▾</span>
+          <button onClick={() => setAgentMenuOpen((value) => !value)} className="flex max-w-40 items-center gap-1 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs" title={currentAgent ? agentDisplayLabel(currentAgent) : 'Select agent'}>
+            <span className="truncate">{currentAgent ? agentDisplayLabel(currentAgent) : 'Select'}</span><span className="text-canvas-muted">▾</span>
           </button>
-          {agentMenuOpen && <><button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" /><div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[180px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface shadow-lg">{agents.map((agent) => <button key={agent.id} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className={`w-full px-3 py-2 text-left text-xs hover:bg-canvas-border ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''}`}>{agent.name}</button>)}</div></>}
+          {agentMenuOpen && <><button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" /><div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[220px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface py-1 shadow-lg">{relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}><div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted"><span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{relay.name}</span><span className="font-normal normal-case">{relayStateLabel(relay)}</span></div>{relay.machines.map((machine) => { const agent = agentById.get(machine.id); if (!agent) return null; return <button key={agent.id} disabled={!relayCanConnect(relay) || !machine.online} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className={`flex w-full items-center gap-2 px-5 py-2 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''} ${!machine.online ? 'opacity-60' : ''}`}><span className={`h-1.5 w-1.5 rounded-full ${machine.online ? 'bg-emerald-500' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{agent.name}</span>{!machine.online && <span className="text-[9px]">offline</span>}</button>; })}{relay.machines.length === 0 && <div className="px-5 py-2 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}</div>)}</div></>}
         </div>
         <button onClick={() => setKeyboardVisible(!keyboardVisible)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Touch keyboard"><Keyboard size={16} className={keyboardVisible ? 'text-canvas-accent' : 'text-canvas-muted'} /></button>
         {management.connections && <button onClick={() => setConnectionOpen(true)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Connections"><Settings2 size={16} className="text-canvas-muted" /></button>}
@@ -245,9 +262,9 @@ export default function MobileWorkspace() {
         <span className="min-w-0 flex-1" />
         <button onClick={() => setMenuOpen((value) => !value)} className="shrink-0 rounded p-1.5 hover:bg-canvas-border" title="Menu">{menuOpen ? <X size={18} className="text-canvas-muted" /> : <Menu size={18} className="text-canvas-muted" />}</button>
         {menuOpen && <><button className="fixed inset-0 z-[60]" onClick={() => setMenuOpen(false)} aria-label="Close menu" /><div className="absolute left-0 right-0 top-10 z-[61] border-b border-canvas-border bg-canvas-surface p-2 shadow-lg">
-          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Create</div><div className="flex gap-1 px-2">{[
+          {canCreate && <><div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Create</div><div className="flex gap-1 px-2">{[
             ['terminal', TerminalIcon, 'New terminal'], ['filebrowser', FolderOpen, 'Files'], ['notes', StickyNote, 'Note'], ['tunnels', Cable, 'Tunnels'],
-          ].map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title={String(label)}><Icon size={18} className="text-canvas-accent" /></button>)}</div>
+          ].filter(([type]) => supportsCreateType(String(type))).map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title={String(label)}><Icon size={18} className="text-canvas-accent" /></button>)}</div></>}
           <div className="my-1 h-px bg-canvas-border" /><div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Settings</div><div className="flex gap-1 px-2">
             <button onClick={() => { setVisualOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Visual"><Wrench size={18} className="text-canvas-accent" /></button>
             {management.account && <button onClick={() => { setAccountOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Account"><User size={18} className="text-canvas-accent" /></button>}
@@ -255,6 +272,7 @@ export default function MobileWorkspace() {
           </div><div className="my-1 h-px bg-canvas-border" /><button onClick={() => { setLogoutOpen(true); setMenuOpen(false); }} className="flex w-full items-center gap-2 rounded px-2 py-2 text-canvas-muted hover:bg-canvas-border"><LogOut size={16} /><span className="text-xs">Logout</span></button>
         </div></>}
       </header>
+      <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities()])} />
 
       <main className="relative min-h-0 flex-1">
         {!activeEntry ? <div className="h-full overflow-y-auto p-3" style={{ paddingBottom: TAB_HEIGHT + 12 }} data-mobile-canvas>
@@ -263,7 +281,7 @@ export default function MobileWorkspace() {
               {deleteMode && <span className="absolute -right-1 -top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500"><X size={10} className="text-white" /></span>}
               <EntryIcon entry={entry} /><span className="mt-1 min-h-6 max-w-16 overflow-hidden text-center text-[10px] font-semibold leading-3" style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: MOBILE_TILE_LABEL_LINES }}>{mobileEntryTitle(entry)}</span>
             </button>)}
-            <button onClick={() => setCreateOpen(true)} className="flex h-[88px] w-[72px] items-center justify-center rounded-xl border border-dashed border-canvas-border active:opacity-70" title="Create"><Plus size={20} className="text-canvas-muted" /></button>
+            {canCreate && <button onClick={() => setCreateOpen(true)} className="flex h-[88px] w-[72px] items-center justify-center rounded-xl border border-dashed border-canvas-border active:opacity-70" title="Create"><Plus size={20} className="text-canvas-muted" /></button>}
           </div>
         </div> : <section key={`${activeEntry.key}-${refreshKey}`} className="absolute inset-0 flex min-h-0 flex-col bg-canvas-bg" style={{ bottom: TAB_HEIGHT }}>
           <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryTitle(activeEntry)}</span><button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
@@ -276,9 +294,9 @@ export default function MobileWorkspace() {
         </nav>
       </main>
 
-      {createOpen && <><button className="fixed inset-0 z-[80] bg-black/50" onClick={() => setCreateOpen(false)} aria-label="Close create panel" /><div className="fixed bottom-0 left-0 right-0 z-[81] rounded-t-2xl border-t border-canvas-border bg-canvas-surface p-4 pb-8"><div className="mb-4 flex items-center justify-between"><span className="text-sm font-semibold">Create</span><button onClick={() => setCreateOpen(false)}><X size={16} /></button></div><div className="grid grid-cols-4 gap-3">{[
+      {createOpen && canCreate && <><button className="fixed inset-0 z-[80] bg-black/50" onClick={() => setCreateOpen(false)} aria-label="Close create panel" /><div className="fixed bottom-0 left-0 right-0 z-[81] rounded-t-2xl border-t border-canvas-border bg-canvas-surface p-4 pb-8"><div className="mb-4 flex items-center justify-between"><span className="text-sm font-semibold">Create</span><button onClick={() => setCreateOpen(false)}><X size={16} /></button></div><div className="grid grid-cols-4 gap-3">{[
         ['terminal', TerminalIcon, 'Terminal'], ['filebrowser', FolderOpen, 'Files'], ['notes', StickyNote, 'Note'], ['tunnels', Cable, 'Tunnels'],
-      ].map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex flex-col items-center gap-2 rounded-xl p-3 hover:bg-canvas-border"><Icon size={28} className="text-canvas-accent" /><span className="text-[11px]">{String(label)}</span></button>)}</div></div></>}
+      ].filter(([type]) => supportsCreateType(String(type))).map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex flex-col items-center gap-2 rounded-xl p-3 hover:bg-canvas-border"><Icon size={28} className="text-canvas-accent" /><span className="text-[11px]">{String(label)}</span></button>)}</div></div></>}
 
       {contextEntry && <><button className="fixed inset-0 z-[80]" onClick={() => setContextEntry(null)} aria-label="Close item menu" /><div className="fixed bottom-12 left-3 right-3 z-[81] rounded-xl border border-canvas-border bg-canvas-surface p-1 shadow-xl"><button onClick={() => { setRenamingEntry(contextEntry); setRenameValue(mobileEntryTitle(contextEntry)); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs hover:bg-canvas-border"><Pencil size={14} />Rename</button><button onClick={() => { setDeleteEntry(contextEntry); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={14} />Delete</button></div></>}
       {renamingEntry && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4"><div className="w-full max-w-xs rounded-xl border border-canvas-border bg-canvas-surface p-4"><div className="mb-3 text-sm font-semibold">Rename</div><input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void commitRename(); if (event.key === 'Escape') setRenamingEntry(null); }} className="w-full rounded border border-canvas-border bg-canvas-bg px-3 py-2 text-xs outline-none focus:border-canvas-accent" /><div className="mt-3 flex justify-end gap-2"><button onClick={() => setRenamingEntry(null)} className="rounded border border-canvas-border px-3 py-1.5 text-xs">Cancel</button><button onClick={() => void commitRename()} className="rounded border border-canvas-accent bg-canvas-accent/20 px-3 py-1.5 text-xs text-canvas-accent">Save</button></div></div></div>}

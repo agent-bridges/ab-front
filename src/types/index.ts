@@ -73,10 +73,34 @@ export interface PtySession {
 export interface Agent {
   id: string;
   name: string;
-  ip: string;
-  is_local: boolean;
-  created_at: string;
+  ip?: string;
+  is_local?: boolean;
+  created_at?: string;
   pty_info?: Record<string, unknown> | null;
+  relay_id: string;
+  relay_name: string;
+  fingerprint: string;
+  online: boolean;
+}
+
+export interface RelayMachine {
+  /** Canonical route id (`relay_id~daemon_fingerprint`) used by every PTY API. */
+  id: string;
+  name: string;
+  fingerprint: string;
+  online: boolean;
+  last_seen?: string | null;
+}
+
+export type RelayStatus = 'online' | 'offline' | 'disabled';
+
+export interface Relay {
+  id: string;
+  name: string;
+  address?: string;
+  enabled: boolean;
+  status: RelayStatus;
+  machines: RelayMachine[];
 }
 
 export interface FsEntry {

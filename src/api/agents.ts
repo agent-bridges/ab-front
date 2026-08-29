@@ -2,11 +2,6 @@ import { authFetch } from './client';
 import { readJsonOrThrow } from './http';
 import type { Agent } from '../types';
 
-export async function fetchAgents(): Promise<Agent[]> {
-  const res = await authFetch('/api/agents');
-  return readJsonOrThrow<Agent[]>(res, 'Failed to fetch agents');
-}
-
 export interface AgentDetail extends Agent {
   jwt_key: string;
   pty_info?: Record<string, unknown> | null;
