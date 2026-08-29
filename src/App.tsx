@@ -6,6 +6,8 @@ import { useAuthStore } from './stores/authStore';
 import { PtyStateConnection } from './api/ptyState';
 import { checkAuth } from './api/auth';
 import Workspace from './workspace/Workspace';
+import MobileWorkspace from './workspace/MobileWorkspace';
+import { useIsMobile } from './hooks/useIsMobile';
 import LoginPage from './components/auth/LoginPage';
 import FloatingKeyboard from './components/keyboard/FloatingKeyboard';
 import FloatingToolbar from './components/keyboard/FloatingToolbar';
@@ -27,6 +29,7 @@ export default function App() {
   const boardRefreshToken = useAgentStore((s) => s.boardRefreshToken);
   const setCurrentAgent = useAgentStore((s) => s.setCurrentAgent);
   const { checkInit } = useAuthStore();
+  const isMobile = useIsMobile();
   const [authChecked, setAuthChecked] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [routeAgentId, setRouteAgentId] = useState(() => getAgentIdFromPath(window.location.pathname));
@@ -167,7 +170,7 @@ export default function App() {
 
   return (
     <div className="h-full flex flex-col relative">
-      <Workspace />
+      {isMobile ? <MobileWorkspace /> : <Workspace />}
       <FloatingKeyboard />
       <FloatingToolbar />
     </div>

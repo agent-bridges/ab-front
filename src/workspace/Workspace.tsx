@@ -10,39 +10,55 @@ import { usePtyStore } from '../stores/ptyStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { createPty, killPty } from '../api/pty';
-import TerminalView from '../components/terminal/TerminalView';
-import FileBrowserView from '../components/filebrowser/FileBrowserView';
-import NotesEditor from '../components/notes/NotesEditor';
-import TunnelsView from '../components/tunnels/TunnelsView';
 import ConnectionSettingsModal from '../components/ConnectionSettingsModal';
 import SettingsModal from '../components/SettingsModal';
 import ConfirmDialog from '../components/dialogs/ConfirmDialog';
-import ClaudeIcon from '../components/icons/ClaudeIcon';
-import CodexIcon from '../components/icons/CodexIcon';
-import { getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
-import type { BoardItem, BoardItemType, IdeGroupLayout, PtySession } from '../types';
-
-type WorkspaceEntry =
-  | { key: string; kind: 'session'; agentId: string; session: PtySession }
-  | { key: string; kind: 'board'; agentId: string; item: BoardItem };
+import type { BoardItemType, IdeGroupLayout } from '../types';
+import DesktopEntryPane, {
+  type WorkspaceEntry,
+  workspaceEntryTitle as entryTitle,
+  WorkspaceEntryIcon as EntryIcon,
+} from './DesktopEntryPane';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
-const entryTitle = (entry: WorkspaceEntry) => entry.kind === 'session' ? entry.session.name : entry.item.label;
 
-function EntryIcon({ entry }: { entry: WorkspaceEntry }) {
-  if (entry.kind === 'board') {
-    const Icon = entry.item.type === 'notes' ? StickyNote : entry.item.type === 'filebrowser' ? FolderOpen : Cable;
-    return <Icon size={13} className="shrink-0 text-canvas-accent" />;
+export function claimInitialPaneForAgent(
+  visitedAgents: Set<string>,
+  agentId: string,
+  focusedPaneIsValid: boolean,
+  hasEntry: boolean,
+): boolean {
+  if (focusedPaneIsValid) {
+    visitedAgents.add(agentId);
+    return false;
   }
-  const meta = getTerminalStatusMeta(entry.session.alive, entry.session.processes, entry.session.ai_status);
-  const ai = meta.aiAgent;
-  return (
-    <span className="relative shrink-0">
-      {ai === 'claude' ? <ClaudeIcon size={14} /> : ai === 'codex' ? <CodexIcon size={14} /> : <TerminalIcon size={13} className="text-canvas-accent" />}
-      <span className={`absolute -bottom-0.5 -right-1 h-1.5 w-1.5 rounded-full ${PROCESS_STATUS_THEME[meta.status].dotClass}`} />
-    </span>
-  );
+  if (visitedAgents.has(agentId) || !hasEntry) return false;
+  visitedAgents.add(agentId);
+  return true;
+}
+
+export function workspaceEntriesForAgent({
+  currentAgentId,
+  ptyAgentId,
+  sessionsById,
+  workspaceAgentId,
+  boardItems,
+}: {
+  currentAgentId: string | null;
+  ptyAgentId: string | null;
+  sessionsById: Record<string, import('../types').PtySession>;
+  workspaceAgentId: string | null;
+  boardItems: import('../types').BoardItem[];
+}): WorkspaceEntry[] {
+  if (!currentAgentId) return [];
+  const sessions = ptyAgentId === currentAgentId
+    ? Object.values(sessionsById).map((session) => ({ key: sessionKey(session.id), kind: 'session' as const, agentId: currentAgentId, session }))
+    : [];
+  const resources = workspaceAgentId === currentAgentId
+    ? boardItems.map((item) => ({ key: boardKey(item.id), kind: 'board' as const, agentId: currentAgentId, item }))
+    : [];
+  return [...sessions, ...resources];
 }
 
 function RenameInput({ value, onSave, onCancel }: { value: string; onSave: (name: string) => Promise<void> | void; onCancel: () => void }) {
@@ -69,14 +85,7 @@ function RenameInput({ value, onSave, onCancel }: { value: string; onSave: (name
   );
 }
 
-function EntryBody({ entry }: { entry: WorkspaceEntry }) {
-  if (entry.kind === 'session') return <TerminalView session={entry.session} agentId={entry.agentId} />;
-  if (entry.item.type === 'filebrowser') return <FileBrowserView item={entry.item} />;
-  if (entry.item.type === 'notes') return <NotesEditor item={entry.item} />;
-  return <TunnelsView item={entry.item} />;
-}
-
-function GroupBody({ entries, layout }: { entries: WorkspaceEntry[]; layout: IdeGroupLayout }) {
+function GroupBody({ entries, layout, onHide, onDelete }: { entries: WorkspaceEntry[]; layout: IdeGroupLayout; onHide: (entry: WorkspaceEntry) => void; onDelete: (entry: WorkspaceEntry) => void }) {
   const style = layout === 'h2' || layout === 'h3'
     ? { gridTemplateRows: `repeat(${entries.length}, minmax(0, 1fr))`, gridTemplateColumns: 'minmax(0, 1fr)' }
     : layout === 'grid'
@@ -86,10 +95,7 @@ function GroupBody({ entries, layout }: { entries: WorkspaceEntry[]; layout: Ide
     <div className="grid min-h-0 flex-1 gap-1 bg-canvas-border p-1" style={style}>
       {entries.map((entry) => (
         <div key={entry.key} className="flex min-h-0 min-w-0 flex-col bg-canvas-bg">
-          <div className="flex h-7 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-2 text-[11px] text-canvas-muted">
-            <EntryIcon entry={entry} /><span className="truncate">{entryTitle(entry)}</span>
-          </div>
-          <div className="min-h-0 flex-1"><EntryBody entry={entry} /></div>
+          <DesktopEntryPane entry={entry} onHide={() => onHide(entry)} onDelete={() => onDelete(entry)} />
         </div>
       ))}
     </div>
@@ -102,9 +108,11 @@ export default function Workspace() {
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
   const sessionsById = usePtyStore((state) => state.sessionsById);
+  const ptyAgentId = usePtyStore((state) => state.agentId);
   const connected = usePtyStore((state) => state.connected);
   const renameSession = usePtyStore((state) => state.renameSession);
   const boardItems = useWorkspaceStore((state) => state.boardItems);
+  const workspaceAgentId = useWorkspaceStore((state) => state.agentId);
   const sort = useWorkspaceStore((state) => state.sort);
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth);
   const openTabIds = useWorkspaceStore((state) => state.openTabIds);
@@ -120,6 +128,7 @@ export default function Workspace() {
   const createGroup = useWorkspaceStore((state) => state.createGroup);
   const deleteGroup = useWorkspaceStore((state) => state.deleteGroup);
   const renameGroup = useWorkspaceStore((state) => state.renameGroup);
+  const removeGroupMember = useWorkspaceStore((state) => state.removeGroupMember);
   const setGroupLayout = useWorkspaceStore((state) => state.setGroupLayout);
   const keyboardVisible = useKeyboardStore((state) => state.keyboard.visible);
   const setKeyboardVisible = useKeyboardStore((state) => state.setKeyboardVisible);
@@ -130,6 +139,7 @@ export default function Workspace() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
+  const autoOpenedAgentsRef = useRef<Set<string>>(new Set());
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem('ab:workspace:expanded-agents') || '[]') as string[]); }
     catch { return new Set(); }
@@ -143,17 +153,14 @@ export default function Workspace() {
   }, [currentAgentId]);
 
   const entries = useMemo<WorkspaceEntry[]>(() => {
-    if (!currentAgentId) return [];
-    const sessions = Object.values(sessionsById).map((session) => ({ key: sessionKey(session.id), kind: 'session' as const, agentId: currentAgentId, session }));
-    const resources = boardItems.map((item) => ({ key: boardKey(item.id), kind: 'board' as const, agentId: currentAgentId, item }));
-    const combined = [...sessions, ...resources];
+    const combined = workspaceEntriesForAgent({ currentAgentId, ptyAgentId, sessionsById, workspaceAgentId, boardItems });
     return combined.sort((a, b) => {
       if (sort === 'type' && a.kind !== b.kind) return a.kind === 'session' ? -1 : 1;
       if (sort === 'status' && a.kind === 'session' && b.kind === 'session') return Number(!a.session.alive) - Number(!b.session.alive);
       if (sort === 'recent' && a.kind === 'session' && b.kind === 'session') return b.session.created_at.localeCompare(a.session.created_at);
       return entryTitle(a).localeCompare(entryTitle(b), undefined, { sensitivity: 'base' });
     });
-  }, [boardItems, currentAgentId, sessionsById, sort]);
+  }, [boardItems, currentAgentId, ptyAgentId, sessionsById, sort, workspaceAgentId]);
   const entryMap = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries]);
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
   const visibleEntries = useMemo(() => {
@@ -165,10 +172,15 @@ export default function Workspace() {
   const focusedGroup = focusedItemId ? groupMap.get(focusedItemId) : undefined;
 
   useEffect(() => {
-    if (focusedItemId && (entryMap.has(focusedItemId) || groupMap.has(focusedItemId))) return;
+    if (!currentAgentId) return;
+    const focusedPaneIsValid = Boolean(focusedItemId && (entryMap.has(focusedItemId) || groupMap.has(focusedItemId)));
+    // Pick a useful initial pane once per agent. After the user explicitly
+    // hides the final tab, keep the workspace empty even after A -> B -> A.
     const first = entries[0];
-    if (first) openTab(first.key);
-  }, [entries, entryMap, focusedItemId, groupMap, openTab]);
+    if (claimInitialPaneForAgent(autoOpenedAgentsRef.current, currentAgentId, focusedPaneIsValid, Boolean(first)) && first) {
+      openTab(first.key);
+    }
+  }, [currentAgentId, entries, entryMap, focusedItemId, groupMap, openTab]);
 
   const addResource = async (type: BoardItemType) => {
     try { await addBoardItem(type); } catch (error) { console.error(error); }
@@ -246,13 +258,13 @@ export default function Workspace() {
           })}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          {focusedEntry ? <EntryBody entry={focusedEntry} /> : focusedGroup ? <>
+          {focusedEntry ? <DesktopEntryPane entry={focusedEntry} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
             <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-2">
               <input value={focusedGroup.name} onChange={(event) => renameGroup(focusedGroup.id, event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs outline-none" />
               <select value={focusedGroup.layout} onChange={(event) => setGroupLayout(focusedGroup.id, event.target.value as IdeGroupLayout)} className="rounded border border-canvas-border bg-canvas-bg px-1 text-xs"><option value="v2">Columns</option><option value="h2">Rows</option><option value="grid">Grid</option></select>
               <button onClick={() => deleteGroup(focusedGroup.id)} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Trash2 size={12} /></button>
             </div>
-            <GroupBody entries={focusedGroup.members.flatMap((id) => { const entry = entryMap.get(id); return entry ? [entry] : []; })} layout={focusedGroup.layout} />
+            <GroupBody entries={focusedGroup.members.flatMap((id) => { const entry = entryMap.get(id); return entry ? [entry] : []; })} layout={focusedGroup.layout} onHide={(entry) => removeGroupMember(focusedGroup.id, entry.key)} onDelete={setDeleteEntry} />
           </> : <div className="flex flex-1 items-center justify-center text-sm text-canvas-muted"><div className="text-center"><TerminalIcon size={30} className="mx-auto mb-3 opacity-40" /><div>Select a session from the workspace tree.</div><button className="mt-3 rounded border border-canvas-border px-3 py-1.5 text-xs hover:bg-canvas-border" onClick={() => void newTerminal()}><Plus size={12} className="mr-1 inline" />New terminal</button></div></div>}
         </div>
       </main>

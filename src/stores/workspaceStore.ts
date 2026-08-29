@@ -58,6 +58,7 @@ interface WorkspaceState extends WorkspacePrefs {
   createGroup: (members: string[]) => string;
   deleteGroup: (id: string) => void;
   renameGroup: (id: string, name: string) => void;
+  removeGroupMember: (id: string, member: string) => void;
   setGroupLayout: (id: string, layout: IdeGroupLayout) => void;
 }
 
@@ -123,5 +124,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
   deleteGroup: (id) => { set((s) => ({ groups: s.groups.filter((g) => g.id !== id) })); get().closeTab(id); const s = get(); savePrefs(s.agentId, s); },
   renameGroup: (id, name) => { set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, name } : g) })); const s = get(); savePrefs(s.agentId, s); },
+  removeGroupMember: (id, member) => { set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, members: g.members.filter((key) => key !== member), sizes: defaultSizes(g.layout, Math.max(0, g.members.length - 1)) } : g) })); const s = get(); savePrefs(s.agentId, s); },
   setGroupLayout: (id, layout) => { set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, layout, sizes: defaultSizes(layout, g.members.length) } : g) })); const s = get(); savePrefs(s.agentId, s); },
 }));

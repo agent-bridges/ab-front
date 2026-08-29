@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 
-const MOBILE_BREAKPOINT = 768; // md
+export const MOBILE_BREAKPOINT = 768; // Tailwind's md breakpoint
+
+export function isMobileWidth(width: number): boolean {
+  return width < MOBILE_BREAKPOINT;
+}
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
+  const [isMobile, setIsMobile] = useState(() => isMobileWidth(window.innerWidth));
 
   useEffect(() => {
     const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
