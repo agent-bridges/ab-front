@@ -11,6 +11,7 @@ import { useIsMobile } from './hooks/useIsMobile';
 import LoginPage from './components/auth/LoginPage';
 import FloatingKeyboard from './components/keyboard/FloatingKeyboard';
 import FloatingToolbar from './components/keyboard/FloatingToolbar';
+import { useCapabilitiesStore } from './stores/capabilitiesStore';
 
 function getAgentIdFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/agents\/([^/]+)$/);
@@ -29,6 +30,8 @@ export default function App() {
   const boardRefreshToken = useAgentStore((s) => s.boardRefreshToken);
   const setCurrentAgent = useAgentStore((s) => s.setCurrentAgent);
   const { checkInit } = useAuthStore();
+  const loadCapabilities = useCapabilitiesStore((s) => s.load);
+  const resetCapabilities = useCapabilitiesStore((s) => s.reset);
   const isMobile = useIsMobile();
   const [authChecked, setAuthChecked] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -67,6 +70,7 @@ export default function App() {
 
       if (status === 'unauthenticated') {
         resetAgents();
+        resetCapabilities();
         await loadItems(null);
         setNeedsAuth(true);
         setAuthChecked(true);
@@ -76,7 +80,7 @@ export default function App() {
       const preferredAgentId = getAgentIdFromPath(window.location.pathname);
       resetAgents();
       await loadItems(null);
-      await loadAgents(preferredAgentId);
+      await Promise.all([loadCapabilities(), loadAgents(preferredAgentId)]);
       if (cancelled) return;
 
       setNeedsAuth(false);
@@ -88,7 +92,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [checkInit, loadAgents, loadItems, resetAgents]);
+  }, [checkInit, loadAgents, loadCapabilities, loadItems, resetAgents, resetCapabilities]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -158,7 +162,8 @@ export default function App() {
         onLoggedIn={() => {
           const preferredAgentId = getAgentIdFromPath(window.location.pathname);
           resetAgents();
-          void loadItems(null).then(() => loadAgents(preferredAgentId)).then(() => {
+          resetCapabilities();
+          void loadItems(null).then(() => Promise.all([loadCapabilities(), loadAgents(preferredAgentId)])).then(() => {
             setNeedsAuth(false);
             setAuthChecked(true);
             setRouteAgentId(preferredAgentId);

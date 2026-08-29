@@ -24,6 +24,7 @@ import { useKeyboardStore } from '../stores/keyboardStore';
 import { usePtyStore } from '../stores/ptyStore';
 import { useWorkspaceStore } from '../stores/workspaceStore';
 import type { BoardItem, BoardItemType, PtySession } from '../types';
+import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/useCapabilities';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -98,6 +99,8 @@ function LogoutDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel
 }
 
 export default function MobileWorkspace() {
+  const capabilities = useCapabilities();
+  const management = managementEntrypointsForCapabilities(capabilities);
   const agents = useAgentStore((state) => state.agents);
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
@@ -236,7 +239,7 @@ export default function MobileWorkspace() {
           {agentMenuOpen && <><button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" /><div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[180px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface shadow-lg">{agents.map((agent) => <button key={agent.id} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className={`w-full px-3 py-2 text-left text-xs hover:bg-canvas-border ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''}`}>{agent.name}</button>)}</div></>}
         </div>
         <button onClick={() => setKeyboardVisible(!keyboardVisible)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Touch keyboard"><Keyboard size={16} className={keyboardVisible ? 'text-canvas-accent' : 'text-canvas-muted'} /></button>
-        <button onClick={() => setConnectionOpen(true)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Connections"><Settings2 size={16} className="text-canvas-muted" /></button>
+        {management.connections && <button onClick={() => setConnectionOpen(true)} className="shrink-0 rounded p-1 hover:bg-canvas-border" title="Connections"><Settings2 size={16} className="text-canvas-muted" /></button>}
         <button onClick={toggleDragMode} className={`shrink-0 rounded p-1 ${dragMode ? 'bg-canvas-accent/20 ring-1 ring-canvas-accent' : 'hover:bg-canvas-border'}`} title="Reorder icons"><GripVertical size={16} className={dragMode ? 'text-canvas-accent' : 'text-canvas-muted'} /></button>
         <button onClick={toggleDeleteMode} className={`shrink-0 rounded p-1 ${deleteMode ? 'bg-red-500/20 ring-1 ring-red-500' : 'hover:bg-canvas-border'}`} title="Delete mode"><Trash2 size={16} className={deleteMode ? 'text-red-400' : 'text-canvas-muted'} /></button>
         <span className="min-w-0 flex-1" />
@@ -247,8 +250,8 @@ export default function MobileWorkspace() {
           ].map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title={String(label)}><Icon size={18} className="text-canvas-accent" /></button>)}</div>
           <div className="my-1 h-px bg-canvas-border" /><div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Settings</div><div className="flex gap-1 px-2">
             <button onClick={() => { setVisualOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Visual"><Wrench size={18} className="text-canvas-accent" /></button>
-            <button onClick={() => { setAccountOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Account"><User size={18} className="text-canvas-accent" /></button>
-            <button onClick={() => { setAuthOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Authentication"><Lock size={18} className="text-canvas-accent" /></button>
+            {management.account && <button onClick={() => { setAccountOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Account"><User size={18} className="text-canvas-accent" /></button>}
+            {management.clientCertificates && <button onClick={() => { setAuthOpen(true); setMenuOpen(false); }} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title="Authentication"><Lock size={18} className="text-canvas-accent" /></button>}
           </div><div className="my-1 h-px bg-canvas-border" /><button onClick={() => { setLogoutOpen(true); setMenuOpen(false); }} className="flex w-full items-center gap-2 rounded px-2 py-2 text-canvas-muted hover:bg-canvas-border"><LogOut size={16} /><span className="text-xs">Logout</span></button>
         </div></>}
       </header>
@@ -280,10 +283,10 @@ export default function MobileWorkspace() {
       {contextEntry && <><button className="fixed inset-0 z-[80]" onClick={() => setContextEntry(null)} aria-label="Close item menu" /><div className="fixed bottom-12 left-3 right-3 z-[81] rounded-xl border border-canvas-border bg-canvas-surface p-1 shadow-xl"><button onClick={() => { setRenamingEntry(contextEntry); setRenameValue(mobileEntryTitle(contextEntry)); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs hover:bg-canvas-border"><Pencil size={14} />Rename</button><button onClick={() => { setDeleteEntry(contextEntry); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={14} />Delete</button></div></>}
       {renamingEntry && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4"><div className="w-full max-w-xs rounded-xl border border-canvas-border bg-canvas-surface p-4"><div className="mb-3 text-sm font-semibold">Rename</div><input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void commitRename(); if (event.key === 'Escape') setRenamingEntry(null); }} className="w-full rounded border border-canvas-border bg-canvas-bg px-3 py-2 text-xs outline-none focus:border-canvas-accent" /><div className="mt-3 flex justify-end gap-2"><button onClick={() => setRenamingEntry(null)} className="rounded border border-canvas-border px-3 py-1.5 text-xs">Cancel</button><button onClick={() => void commitRename()} className="rounded border border-canvas-accent bg-canvas-accent/20 px-3 py-1.5 text-xs text-canvas-accent">Save</button></div></div></div>}
 
-      <MobileConnectionPanel open={connectionOpen} onClose={() => setConnectionOpen(false)} />
+      {management.connections && <MobileConnectionPanel open={connectionOpen} onClose={() => setConnectionOpen(false)} />}
       <MobileVisualPanel open={visualOpen} onClose={() => setVisualOpen(false)} />
-      <MobileAccountPanel open={accountOpen} onClose={() => setAccountOpen(false)} />
-      <MobileAuthPanel open={authOpen} onClose={() => setAuthOpen(false)} />
+      {management.account && <MobileAccountPanel open={accountOpen} onClose={() => setAccountOpen(false)} />}
+      {management.clientCertificates && <MobileAuthPanel open={authOpen} onClose={() => setAuthOpen(false)} />}
       {logoutOpen && <LogoutDialog onCancel={() => setLogoutOpen(false)} onConfirm={() => void logoutRequest().then(() => { authLogout(); window.location.reload(); })} />}
       <ConfirmDialog open={!!deleteEntry} title={deleteEntry?.kind === 'session' ? `Kill "${deleteEntry.session.name}"?` : `Delete "${deleteEntry?.item.label}"?`} message={deleteEntry?.kind === 'session' ? 'This terminates the live PTY session.' : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
     </div>

@@ -19,6 +19,7 @@ import DesktopEntryPane, {
   workspaceEntryTitle as entryTitle,
   WorkspaceEntryIcon as EntryIcon,
 } from './DesktopEntryPane';
+import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/useCapabilities';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -104,6 +105,8 @@ function GroupBody({ entries, layout, onHide, onDelete }: { entries: WorkspaceEn
 
 export default function Workspace() {
   const isMobile = useIsMobile();
+  const capabilities = useCapabilities();
+  const management = managementEntrypointsForCapabilities(capabilities);
   const agents = useAgentStore((state) => state.agents);
   const currentAgentId = useAgentStore((state) => state.currentAgentId);
   const setCurrentAgent = useAgentStore((state) => state.setCurrentAgent);
@@ -242,7 +245,7 @@ export default function Workspace() {
       <span className="flex-1" />
       <button disabled={tabs.filter((id) => entryMap.has(id)).length < 2} className="rounded p-1.5 hover:bg-canvas-border disabled:opacity-30" onClick={() => createGroup(tabs.filter((id) => entryMap.has(id)))} title="Group open tabs"><Columns2 size={15} /></button>
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setKeyboardVisible(!keyboardVisible)} title="Touch keyboard"><Keyboard size={15} /></button>
-      <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setConnectionsOpen(true)} title="Connections"><Settings2 size={15} /></button>
+      {management.connections && <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setConnectionsOpen(true)} title="Connections"><Settings2 size={15} /></button>}
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setSettingsOpen(true)} title="Settings"><Wrench size={15} /></button>
     </header>
     <div className="relative flex min-h-0 flex-1">
@@ -269,7 +272,7 @@ export default function Workspace() {
         </div>
       </main>
     </div>
-    <ConnectionSettingsModal open={connectionsOpen} onClose={() => setConnectionsOpen(false)} />
+    {management.connections && <ConnectionSettingsModal open={connectionsOpen} onClose={() => setConnectionsOpen(false)} />}
     <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     <ConfirmDialog open={!!deleteEntry} title={deleteEntry?.kind === 'session' ? `Kill "${deleteEntry.session.name}"?` : `Delete "${deleteEntry?.item.label}"?`} message={deleteEntry?.kind === 'session' ? 'This terminates the live PTY session.' : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
   </div>;

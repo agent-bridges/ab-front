@@ -3,6 +3,7 @@ import DialogShell from './dialogs/DialogShell';
 import { authFetch } from '../api/client';
 import TouchKeysPanel from './keyboard/TouchKeysPanel';
 import ClientCertSettings from './ClientCertSettings';
+import { settingsSectionsForCapabilities, useCapabilities, type SettingsSection } from '../hooks/useCapabilities';
 
 const FONT_SIZE_KEY = 'ab-terminal-font-size';
 const SCROLL_SPEED_KEY = 'ab-touch-scroll-speed';
@@ -21,7 +22,9 @@ interface Props {
 }
 
 export default function SettingsModal({ open, onClose }: Props) {
-  const [tab, setTab] = useState<'visual' | 'account' | 'auth'>('visual');
+  const capabilities = useCapabilities();
+  const sections = settingsSectionsForCapabilities(capabilities);
+  const [tab, setTab] = useState<SettingsSection>('visual');
 
   // Visual
   const [fontSize, setFontSize] = useState(() => load(FONT_SIZE_KEY, 14));
@@ -61,6 +64,10 @@ export default function SettingsModal({ open, onClose }: Props) {
       setPwStatus(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!sections.includes(tab)) setTab('visual');
+  }, [sections, tab]);
 
   const handleChangePassword = async () => {
     if (!currentPw || !newPw) { setPwStatus({ ok: false, msg: 'Fill in all fields' }); return; }
@@ -111,7 +118,7 @@ export default function SettingsModal({ open, onClose }: Props) {
         >
           Visual
         </button>
-        <button
+        {capabilities.passwordChange && <button
           onClick={() => setTab('account')}
           className={`flex-1 py-2.5 text-xs font-medium text-center ${
             tab === 'account'
@@ -120,8 +127,8 @@ export default function SettingsModal({ open, onClose }: Props) {
           }`}
         >
           Account
-        </button>
-        <button
+        </button>}
+        {capabilities.clientCertManagement && <button
           onClick={() => setTab('auth')}
           className={`flex-1 py-2.5 text-xs font-medium text-center ${
             tab === 'auth'
@@ -130,7 +137,7 @@ export default function SettingsModal({ open, onClose }: Props) {
           }`}
         >
           Authentication
-        </button>
+        </button>}
       </div>
 
       <div className="p-5">
@@ -209,7 +216,7 @@ export default function SettingsModal({ open, onClose }: Props) {
           </div>
         )}
 
-        {tab === 'account' && (
+        {capabilities.passwordChange && tab === 'account' && (
           <div className="space-y-4">
             <div className="text-xs font-semibold text-canvas-text mb-1">Change Password</div>
 
@@ -259,7 +266,7 @@ export default function SettingsModal({ open, onClose }: Props) {
           </div>
         )}
 
-        {tab === 'auth' && open && <ClientCertSettings />}
+        {capabilities.clientCertManagement && tab === 'auth' && open && <ClientCertSettings />}
       </div>
     </DialogShell>
   );
