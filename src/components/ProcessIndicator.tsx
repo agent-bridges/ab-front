@@ -82,6 +82,29 @@ export interface TerminalStatusMeta {
   currentTool: string | null;
 }
 
+const AI_AGENT_LABELS: Record<Exclude<AiAgent, null>, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+  aider: 'Aider',
+  cursor: 'Cursor',
+};
+
+/** Explicit user-facing activity text; the status dot is only a secondary cue. */
+export function getAgentActivityLabel(meta: TerminalStatusMeta): { text: string; className: string } | null {
+  if (!meta.aiAgent) return null;
+  const agent = AI_AGENT_LABELS[meta.aiAgent];
+  if (meta.status === 'ai-busy') {
+    return {
+      text: `${agent} · ${meta.currentTool || 'working'}`,
+      className: 'text-orange-400',
+    };
+  }
+  if (meta.status === 'ai-idle') {
+    return { text: `${agent} · ready`, className: 'text-green-400' };
+  }
+  return { text: `${agent} · status unknown`, className: 'text-canvas-muted' };
+}
+
 export function getTerminalStatusMeta(alive?: boolean, processes?: ProcessInfo[], aiStatus?: string): TerminalStatusMeta {
   return {
     status: getProcessStatus(alive, processes, aiStatus),

@@ -28,6 +28,7 @@ import type { Relay } from '../types';
 import type { Agent } from '../types';
 import ClientAliasDialog from '../components/ClientAliasDialog';
 import { daemonDisplayName, sessionAliasKey, useClientAliasStore } from '../stores/clientAliasStore';
+import { getAgentActivityLabel, getTerminalStatusMeta } from '../components/ProcessIndicator';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -260,13 +261,13 @@ export default function Workspace() {
             <button className="hidden shrink-0 rounded p-1 group-hover:block hover:bg-canvas-border" onClick={() => setAliasTarget({ kind: 'daemon', agent })} title={`Set local label for ${agent.name}`}><Pencil size={10} /></button>
             </div>
             {expanded && current && <div className={DESKTOP_TREE_DEPTH_CLASSES.childrenBranch}>
-              {visibleEntries.map((entry) => <div key={entry.key} className={`group flex min-h-7 items-center gap-2 rounded px-2 text-xs hover:bg-canvas-border ${focusedItemId === entry.key ? 'bg-canvas-accent/15 text-canvas-accent' : 'text-canvas-text'}`}>
+              {visibleEntries.map((entry) => { const activity = entry.kind === 'session' ? getAgentActivityLabel(getTerminalStatusMeta(entry.session.alive, entry.session.processes, entry.session.ai_status)) : null; return <div key={entry.key} className={`group flex min-h-7 items-center gap-2 rounded px-2 text-xs hover:bg-canvas-border ${focusedItemId === entry.key ? 'bg-canvas-accent/15 text-canvas-accent' : 'text-canvas-text'}`}>
                 <button className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={() => { openTab(entry.key); if (isMobile) setSidebarOpen(false); }} onDoubleClick={() => entry.kind === 'session' ? setAliasTarget({ kind: 'session', entry }) : setEditingKey(entry.key)}>
                   <EntryIcon entry={entry} />
-                  {editingKey === entry.key && entry.kind === 'board' ? <RenameInput value={entry.item.label} onCancel={() => setEditingKey(null)} onSave={(name) => updateBoardItem(entry.item.id, { label: name })} /> : <span className="truncate">{workspaceEntryDisplayTitle(entry, sessionAliases)}</span>}
+                  {editingKey === entry.key && entry.kind === 'board' ? <RenameInput value={entry.item.label} onCancel={() => setEditingKey(null)} onSave={(name) => updateBoardItem(entry.item.id, { label: name })} /> : <><span className="min-w-0 flex-1 truncate">{workspaceEntryDisplayTitle(entry, sessionAliases)}</span>{activity && <span className={`max-w-32 shrink-0 truncate text-[9px] ${activity.className}`} title={activity.text}>{activity.text}</span>}</>}
                 </button>
                 {editingKey !== entry.key && <><button className="hidden rounded p-0.5 group-hover:block" onClick={() => entry.kind === 'session' ? setAliasTarget({ kind: 'session', entry }) : setEditingKey(entry.key)}><Pencil size={10} /></button><button className="hidden rounded p-0.5 text-red-400 group-hover:block" onClick={() => setDeleteEntry(entry)}><Trash2 size={10} /></button></>}
-              </div>)}
+              </div>; })}
               {visibleEntries.length === 0 && <div className="px-3 py-2 text-[11px] text-canvas-muted">No matching entries</div>}
             </div>}
           </div>;
