@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownUp, Cable, ChevronDown, ChevronRight, Columns2, FolderOpen, Keyboard,
+  ArrowDownUp, Cable, ChevronDown, ChevronRight, Columns2, FolderOpen, Keyboard, Link2,
   LayoutGrid, Menu, Pencil, Plus, StickyNote, Terminal as TerminalIcon,
   Trash2, Wrench, X,
 } from 'lucide-react';
@@ -29,6 +29,7 @@ import type { Agent } from '../types';
 import ClientAliasDialog from '../components/ClientAliasDialog';
 import { daemonDisplayName, sessionAliasKey, useClientAliasStore } from '../stores/clientAliasStore';
 import { getAgentActivityLabel, getTerminalStatusMeta } from '../components/ProcessIndicator';
+import DaemonLinkDialog from '../components/DaemonLinkDialog';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -169,6 +170,7 @@ export default function Workspace() {
   const [relayEditor, setRelayEditor] = useState<{ relay: Relay | null; deleting: boolean } | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [aliasTarget, setAliasTarget] = useState<{ kind: 'daemon'; agent: Agent } | { kind: 'session'; entry: Extract<WorkspaceEntry, { kind: 'session' }> } | null>(null);
+  const [linkTarget, setLinkTarget] = useState<{ agent: Agent; relay: Relay } | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
@@ -258,6 +260,7 @@ export default function Workspace() {
               onClick={() => { setExpandedAgents((set) => { const next = new Set(set); expanded ? next.delete(agent.id) : next.add(agent.id); return next; }); if (!current) setCurrentAgent(agent.id); }}>
               {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className={`h-1.5 w-1.5 rounded-full ${current && connected ? 'bg-green-400' : machine.online ? 'bg-emerald-500/70' : 'bg-canvas-muted'}`} /><span className="truncate font-medium">{daemonDisplayName(agent, daemonAliases)}</span>{!machine.online && <span className="ml-auto text-[9px] text-canvas-muted">offline</span>}
             </button>
+            {capabilities.daemonLinks && machine.online && <button className="hidden shrink-0 rounded p-1 group-hover:block hover:bg-canvas-border" onClick={() => setLinkTarget({ agent, relay })} title={`Link ${agent.name} to another daemon`}><Link2 size={10} /></button>}
             <button className="hidden shrink-0 rounded p-1 group-hover:block hover:bg-canvas-border" onClick={() => setAliasTarget({ kind: 'daemon', agent })} title={`Set local label for ${agent.name}`}><Pencil size={10} /></button>
             </div>
             {expanded && current && <div className={DESKTOP_TREE_DEPTH_CLASSES.childrenBranch}>
@@ -337,6 +340,13 @@ export default function Workspace() {
       alias={aliasTarget?.kind === 'daemon' ? daemonAliases[aliasTarget.agent.id] || '' : aliasTarget ? sessionAliases[sessionAliasKey(aliasTarget.entry.agentId, aliasTarget.entry.session.id)] || '' : ''}
       onSave={(alias) => { if (aliasTarget?.kind === 'daemon') setDaemonAlias(aliasTarget.agent.id, alias); else if (aliasTarget) setSessionAlias(aliasTarget.entry.agentId, aliasTarget.entry.session.id, alias); }}
       onClose={() => setAliasTarget(null)}
+    />
+    <DaemonLinkDialog
+      open={linkTarget !== null}
+      source={linkTarget?.agent || null}
+      relay={linkTarget?.relay || null}
+      candidates={linkTarget ? agents.filter((agent) => agent.relay_id === linkTarget.relay.id && agent.fingerprint !== linkTarget.agent.fingerprint && agent.online) : []}
+      onClose={() => setLinkTarget(null)}
     />
     <ConfirmDialog open={!!deleteEntry} title={deleteEntry ? `${deleteEntry.kind === 'session' ? 'Kill' : 'Delete'} "${workspaceEntryDisplayTitle(deleteEntry, sessionAliases)}"?` : ''} message={deleteEntry?.kind === 'session' ? `This terminates the live PTY session. Real name: ${deleteEntry.session.name}` : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
   </div>;

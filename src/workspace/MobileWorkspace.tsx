@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cable, FolderOpen, GripVertical, Keyboard, LayoutGrid, Lock, LogOut, Menu,
-  Minus, Pencil, Plus, RotateCw, StickyNote, Terminal as TerminalIcon,
+  Link2, Minus, Pencil, Plus, RotateCw, StickyNote, Terminal as TerminalIcon,
   Trash2, User, Wrench, X,
 } from 'lucide-react';
 import { logout as logoutRequest } from '../api/auth';
@@ -30,6 +30,7 @@ import DiscoveryErrorBanner from '../components/DiscoveryErrorBanner';
 import RelayAdminModal from '../components/RelayAdminModal';
 import ClientAliasDialog from '../components/ClientAliasDialog';
 import type { Agent } from '../types';
+import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { daemonDisplayName, sessionAliasKey, sessionDisplayName, useClientAliasStore } from '../stores/clientAliasStore';
 
 const DEFAULT_COLUMNS = 5;
@@ -169,6 +170,7 @@ export default function MobileWorkspace() {
   const [contextEntry, setContextEntry] = useState<MobileEntry | null>(null);
   const [renamingEntry, setRenamingEntry] = useState<MobileEntry | null>(null);
   const [aliasTarget, setAliasTarget] = useState<{ kind: 'daemon'; agent: Agent } | { kind: 'session'; entry: Extract<MobileEntry, { kind: 'session' }> } | null>(null);
+  const [linkTarget, setLinkTarget] = useState<{ agent: Agent; relay: Relay } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteEntry, setDeleteEntry] = useState<MobileEntry | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -288,6 +290,7 @@ export default function MobileWorkspace() {
                   const agent = agentById.get(machine.id); if (!agent) return null;
                   return <div key={agent.id} className={`flex w-full items-center text-xs ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''} ${!machine.online ? 'opacity-60' : ''}`}>
                     <button disabled={!relayCanConnect(relay) || !machine.online} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className="flex min-w-0 flex-1 items-center gap-2 px-5 py-2 text-left hover:bg-canvas-border disabled:cursor-default"><span className={`h-1.5 w-1.5 rounded-full ${machine.online ? 'bg-emerald-500' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{daemonDisplayName(agent, daemonAliases)}</span>{!machine.online && <span className="text-[9px]">offline</span>}</button>
+                    {capabilities.daemonLinks && machine.online && <button className="rounded p-1 hover:bg-canvas-border" onClick={() => { setLinkTarget({ agent, relay }); setAgentMenuOpen(false); }} title={`Link ${agent.name} to another daemon`}><Link2 size={12} /></button>}
                     <button className="mr-2 rounded p-1 hover:bg-canvas-border" onClick={() => { setAliasTarget({ kind: 'daemon', agent }); setAgentMenuOpen(false); }} title={`Set local label for ${agent.name}`}><Pencil size={12} /></button>
                   </div>;
                 })}
@@ -351,6 +354,13 @@ export default function MobileWorkspace() {
         alias={aliasTarget?.kind === 'daemon' ? daemonAliases[aliasTarget.agent.id] || '' : aliasTarget ? sessionAliases[sessionAliasKey(aliasTarget.entry.agentId, aliasTarget.entry.session.id)] || '' : ''}
         onSave={(alias) => { if (aliasTarget?.kind === 'daemon') setDaemonAlias(aliasTarget.agent.id, alias); else if (aliasTarget) setSessionAlias(aliasTarget.entry.agentId, aliasTarget.entry.session.id, alias); }}
         onClose={() => setAliasTarget(null)}
+      />
+      <DaemonLinkDialog
+        open={linkTarget !== null}
+        source={linkTarget?.agent || null}
+        relay={linkTarget?.relay || null}
+        candidates={linkTarget ? agents.filter((agent) => agent.relay_id === linkTarget.relay.id && agent.fingerprint !== linkTarget.agent.fingerprint && agent.online) : []}
+        onClose={() => setLinkTarget(null)}
       />
 
       <MobileVisualPanel open={visualOpen} onClose={() => setVisualOpen(false)} />

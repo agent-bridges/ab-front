@@ -109,6 +109,25 @@ export interface RelayDiscovery {
   relays: Relay[];
 }
 
+export type DaemonLinkState = 'pending' | 'active' | 'offline' | 'broken';
+
+export interface DaemonLink {
+  name: string;
+  peer_fingerprint: string;
+  relay_name: string;
+  relay_address: string;
+  state: DaemonLinkState;
+  last_success?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DaemonLinksResponse {
+  self_fingerprint: string;
+  links: DaemonLink[];
+}
+
 export interface FsEntry {
   name: string;
   path: string;
