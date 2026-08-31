@@ -10,12 +10,16 @@ import { getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/Proce
 import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
 import { Cable, FolderOpen, StickyNote, Terminal as TerminalIcon } from 'lucide-react';
+import { sessionDisplayName, useClientAliasStore } from '../stores/clientAliasStore';
 
 export type WorkspaceEntry =
   | { key: string; kind: 'session'; agentId: string; session: PtySession }
   | { key: string; kind: 'board'; agentId: string; item: BoardItem };
 
 export const workspaceEntryTitle = (entry: WorkspaceEntry) => entry.kind === 'session' ? entry.session.name : entry.item.label;
+
+export const workspaceEntryDisplayTitle = (entry: WorkspaceEntry, aliases: Record<string, string>) =>
+  entry.kind === 'session' ? sessionDisplayName(entry.agentId, entry.session, aliases) : entry.item.label;
 
 export function WorkspaceEntryIcon({ entry, size = 13 }: { entry: WorkspaceEntry; size?: number }) {
   if (entry.kind === 'board') {
@@ -50,6 +54,8 @@ export default function DesktopEntryPane({
   onHide: () => void;
   onDelete: () => void;
 }) {
+  const sessionAliases = useClientAliasStore((state) => state.sessions);
+  const title = workspaceEntryDisplayTitle(entry, sessionAliases);
   // Board preferences historically used the raw canvas/board item id. Keep
   // that key stable instead of changing it to the Workspace `board:` key.
   const preferenceId = entry.kind === 'board' ? entry.item.id : entry.key;
@@ -59,8 +65,8 @@ export default function DesktopEntryPane({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas-bg" data-desktop-entry-pane={entry.key} onPointerDown={onActivate}>
       <div className={`flex h-7 shrink-0 items-center gap-1 border-b px-2 ${active ? 'border-canvas-accent/40 bg-canvas-accent/15' : 'border-canvas-border bg-canvas-surface'}`}>
         <WorkspaceEntryIcon entry={entry} />
-        <span className={`min-w-0 flex-1 truncate text-[10px] ${active ? 'font-medium text-canvas-accent' : 'text-canvas-muted'}`} title={workspaceEntryTitle(entry)}>
-          {workspaceEntryTitle(entry)}
+        <span className={`min-w-0 flex-1 truncate text-[10px] ${active ? 'font-medium text-canvas-accent' : 'text-canvas-muted'}`} title={title}>
+          {title}
         </span>
         {entry.kind === 'session' && (
           <button
@@ -102,7 +108,7 @@ export default function DesktopEntryPane({
           onClick={(event) => { event.stopPropagation(); onHide(); }}
           onPointerDown={(event) => event.stopPropagation()}
           title="Hide window (keeps the session alive)"
-          aria-label={`Hide ${workspaceEntryTitle(entry)}`}
+          aria-label={`Hide ${title}`}
           data-pane-action="hide"
         >
           <Minus size={11} />
@@ -112,7 +118,7 @@ export default function DesktopEntryPane({
           onClick={(event) => { event.stopPropagation(); onDelete(); }}
           onPointerDown={(event) => event.stopPropagation()}
           title={entry.kind === 'session' ? 'Kill instance' : 'Delete resource'}
-          aria-label={`${entry.kind === 'session' ? 'Kill' : 'Delete'} ${workspaceEntryTitle(entry)}`}
+          aria-label={`${entry.kind === 'session' ? 'Kill' : 'Delete'} ${title}`}
           data-pane-action="delete"
         >
           {entry.kind === 'session' ? <X size={11} /> : <Trash2 size={11} />}

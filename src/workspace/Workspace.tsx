@@ -15,7 +15,8 @@ import ConfirmDialog from '../components/dialogs/ConfirmDialog';
 import type { BoardItemType, IdeGroupLayout } from '../types';
 import DesktopEntryPane, {
   type WorkspaceEntry,
-  workspaceEntryTitle as entryTitle,
+  workspaceEntryDisplayTitle,
+  workspaceEntryTitle,
   WorkspaceEntryIcon as EntryIcon,
 } from './DesktopEntryPane';
 import { managementEntrypointsForCapabilities, useCapabilities } from '../hooks/useCapabilities';
@@ -24,6 +25,9 @@ import { useCapabilitiesStore } from '../stores/capabilitiesStore';
 import DiscoveryErrorBanner from '../components/DiscoveryErrorBanner';
 import RelayAdminModal from '../components/RelayAdminModal';
 import type { Relay } from '../types';
+import type { Agent } from '../types';
+import ClientAliasDialog from '../components/ClientAliasDialog';
+import { daemonDisplayName, sessionAliasKey, useClientAliasStore } from '../stores/clientAliasStore';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -133,7 +137,10 @@ export default function Workspace() {
   const sessionsById = usePtyStore((state) => state.sessionsById);
   const ptyAgentId = usePtyStore((state) => state.agentId);
   const connected = usePtyStore((state) => state.connected);
-  const renameSession = usePtyStore((state) => state.renameSession);
+  const daemonAliases = useClientAliasStore((state) => state.daemons);
+  const sessionAliases = useClientAliasStore((state) => state.sessions);
+  const setDaemonAlias = useClientAliasStore((state) => state.setDaemonAlias);
+  const setSessionAlias = useClientAliasStore((state) => state.setSessionAlias);
   const boardItems = useWorkspaceStore((state) => state.boardItems);
   const workspaceAgentId = useWorkspaceStore((state) => state.agentId);
   const sort = useWorkspaceStore((state) => state.sort);
@@ -160,6 +167,7 @@ export default function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [relayEditor, setRelayEditor] = useState<{ relay: Relay | null; deleting: boolean } | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [aliasTarget, setAliasTarget] = useState<{ kind: 'daemon'; agent: Agent } | { kind: 'session'; entry: Extract<WorkspaceEntry, { kind: 'session' }> } | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
@@ -182,15 +190,15 @@ export default function Workspace() {
       if (sort === 'type' && a.kind !== b.kind) return a.kind === 'session' ? -1 : 1;
       if (sort === 'status' && a.kind === 'session' && b.kind === 'session') return Number(!a.session.alive) - Number(!b.session.alive);
       if (sort === 'recent' && a.kind === 'session' && b.kind === 'session') return b.session.created_at.localeCompare(a.session.created_at);
-      return entryTitle(a).localeCompare(entryTitle(b), undefined, { sensitivity: 'base' });
+      return workspaceEntryDisplayTitle(a, sessionAliases).localeCompare(workspaceEntryDisplayTitle(b, sessionAliases), undefined, { sensitivity: 'base' });
     });
-  }, [boardItems, currentAgentId, ptyAgentId, sessionsById, sort, workspaceAgentId]);
+  }, [boardItems, currentAgentId, ptyAgentId, sessionAliases, sessionsById, sort, workspaceAgentId]);
   const entryMap = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries]);
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
   const visibleEntries = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return normalized ? entries.filter((entry) => entryTitle(entry).toLowerCase().includes(normalized)) : entries;
-  }, [entries, query]);
+    return normalized ? entries.filter((entry) => workspaceEntryDisplayTitle(entry, sessionAliases).toLowerCase().includes(normalized) || workspaceEntryTitle(entry).toLowerCase().includes(normalized)) : entries;
+  }, [entries, query, sessionAliases]);
   const tabs = openTabIds.filter((id) => entryMap.has(id) || groupMap.has(id));
   const focusedEntry = focusedItemId ? entryMap.get(focusedItemId) : undefined;
   const focusedGroup = focusedItemId ? groupMap.get(focusedItemId) : undefined;
@@ -244,17 +252,20 @@ export default function Workspace() {
           const current = agent.id === currentAgentId;
           const expanded = expandedAgents.has(agent.id);
           return <div key={agent.id} className={DESKTOP_TREE_DEPTH_CLASSES.daemonBranch}>
-            <button disabled={!relayCanConnect(relay) || !machine.online} className={`flex h-7 w-full items-center gap-1 text-left text-xs hover:bg-canvas-border disabled:cursor-default ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} ${current ? 'text-canvas-accent' : 'text-canvas-text'} ${!machine.online ? 'opacity-60' : ''}`}
+            <div className={`group flex h-7 w-full items-center ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} ${current ? 'text-canvas-accent' : 'text-canvas-text'} ${!machine.online ? 'opacity-60' : ''}`}>
+            <button disabled={!relayCanConnect(relay) || !machine.online} className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs hover:bg-canvas-border disabled:cursor-default"
               onClick={() => { setExpandedAgents((set) => { const next = new Set(set); expanded ? next.delete(agent.id) : next.add(agent.id); return next; }); if (!current) setCurrentAgent(agent.id); }}>
-              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className={`h-1.5 w-1.5 rounded-full ${current && connected ? 'bg-green-400' : machine.online ? 'bg-emerald-500/70' : 'bg-canvas-muted'}`} /><span className="truncate font-medium">{agent.name}</span>{!machine.online && <span className="ml-auto text-[9px] text-canvas-muted">offline</span>}
+              {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}<span className={`h-1.5 w-1.5 rounded-full ${current && connected ? 'bg-green-400' : machine.online ? 'bg-emerald-500/70' : 'bg-canvas-muted'}`} /><span className="truncate font-medium">{daemonDisplayName(agent, daemonAliases)}</span>{!machine.online && <span className="ml-auto text-[9px] text-canvas-muted">offline</span>}
             </button>
+            <button className="hidden shrink-0 rounded p-1 group-hover:block hover:bg-canvas-border" onClick={() => setAliasTarget({ kind: 'daemon', agent })} title={`Set local label for ${agent.name}`}><Pencil size={10} /></button>
+            </div>
             {expanded && current && <div className={DESKTOP_TREE_DEPTH_CLASSES.childrenBranch}>
               {visibleEntries.map((entry) => <div key={entry.key} className={`group flex min-h-7 items-center gap-2 rounded px-2 text-xs hover:bg-canvas-border ${focusedItemId === entry.key ? 'bg-canvas-accent/15 text-canvas-accent' : 'text-canvas-text'}`}>
-                <button className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={() => { openTab(entry.key); if (isMobile) setSidebarOpen(false); }} onDoubleClick={() => setEditingKey(entry.key)}>
+                <button className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left" onClick={() => { openTab(entry.key); if (isMobile) setSidebarOpen(false); }} onDoubleClick={() => entry.kind === 'session' ? setAliasTarget({ kind: 'session', entry }) : setEditingKey(entry.key)}>
                   <EntryIcon entry={entry} />
-                  {editingKey === entry.key ? <RenameInput value={entryTitle(entry)} onCancel={() => setEditingKey(null)} onSave={(name) => entry.kind === 'session' ? renameSession(entry.agentId, entry.session.id, name) : updateBoardItem(entry.item.id, { label: name })} /> : <span className="truncate">{entryTitle(entry)}</span>}
+                  {editingKey === entry.key && entry.kind === 'board' ? <RenameInput value={entry.item.label} onCancel={() => setEditingKey(null)} onSave={(name) => updateBoardItem(entry.item.id, { label: name })} /> : <span className="truncate">{workspaceEntryDisplayTitle(entry, sessionAliases)}</span>}
                 </button>
-                {editingKey !== entry.key && <><button className="hidden rounded p-0.5 group-hover:block" onClick={() => setEditingKey(entry.key)}><Pencil size={10} /></button><button className="hidden rounded p-0.5 text-red-400 group-hover:block" onClick={() => setDeleteEntry(entry)}><Trash2 size={10} /></button></>}
+                {editingKey !== entry.key && <><button className="hidden rounded p-0.5 group-hover:block" onClick={() => entry.kind === 'session' ? setAliasTarget({ kind: 'session', entry }) : setEditingKey(entry.key)}><Pencil size={10} /></button><button className="hidden rounded p-0.5 text-red-400 group-hover:block" onClick={() => setDeleteEntry(entry)}><Trash2 size={10} /></button></>}
               </div>)}
               {visibleEntries.length === 0 && <div className="px-3 py-2 text-[11px] text-canvas-muted">No matching entries</div>}
             </div>}
@@ -277,7 +288,7 @@ export default function Workspace() {
             ? <option disabled value={`${relay.id}:empty`}>No machines</option>
             : relay.machines.map((machine) => {
               const agent = agentById.get(machine.id);
-              return <option key={machine.id} value={machine.id} disabled={!relayCanConnect(relay) || !machine.online}>{agent ? agentDisplayLabel(agent) : machine.name}{!machine.online ? ' — offline' : ''}</option>;
+              return <option key={machine.id} value={machine.id} disabled={!relayCanConnect(relay) || !machine.online}>{agent ? agentDisplayLabel(agent, daemonDisplayName(agent, daemonAliases)) : machine.name}{!machine.online ? ' — offline' : ''}</option>;
             })}
         </optgroup>)}
       </select>
@@ -297,7 +308,7 @@ export default function Workspace() {
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-9 shrink-0 overflow-x-auto border-b border-canvas-border bg-canvas-surface">
           {tabs.map((id) => {
-            const entry = entryMap.get(id); const group = groupMap.get(id); const title = entry ? entryTitle(entry) : group?.name || id;
+            const entry = entryMap.get(id); const group = groupMap.get(id); const title = entry ? workspaceEntryDisplayTitle(entry, sessionAliases) : group?.name || id;
             return <button key={id} onClick={() => openTab(id)} className={`group flex min-w-28 max-w-52 items-center gap-2 border-r border-canvas-border px-2 text-xs ${focusedItemId === id ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}>
               {entry ? <EntryIcon entry={entry} /> : <LayoutGrid size={13} />}<span className="flex-1 truncate text-left">{title}</span><span onClick={(event) => { event.stopPropagation(); closeTab(id); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={11} /></span>
             </button>;
@@ -317,6 +328,15 @@ export default function Workspace() {
     </div>
     {canAdministerRelays && <RelayAdminModal open={relayEditor !== null} relay={relayEditor?.relay || null} revision={relayRevision} confirmDeleteOnOpen={relayEditor?.deleting} onClose={() => setRelayEditor(null)} onChanged={() => loadRelays(currentAgentId)} />}
     <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-    <ConfirmDialog open={!!deleteEntry} title={deleteEntry?.kind === 'session' ? `Kill "${deleteEntry.session.name}"?` : `Delete "${deleteEntry?.item.label}"?`} message={deleteEntry?.kind === 'session' ? 'This terminates the live PTY session.' : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
+    <ClientAliasDialog
+      open={aliasTarget !== null}
+      kind={aliasTarget?.kind === 'daemon' ? 'daemon' : 'PTY instance'}
+      realName={aliasTarget?.kind === 'daemon' ? aliasTarget.agent.name : aliasTarget?.entry.session.name || ''}
+      immutableId={aliasTarget?.kind === 'daemon' ? aliasTarget.agent.id : aliasTarget?.entry.session.id || ''}
+      alias={aliasTarget?.kind === 'daemon' ? daemonAliases[aliasTarget.agent.id] || '' : aliasTarget ? sessionAliases[sessionAliasKey(aliasTarget.entry.agentId, aliasTarget.entry.session.id)] || '' : ''}
+      onSave={(alias) => { if (aliasTarget?.kind === 'daemon') setDaemonAlias(aliasTarget.agent.id, alias); else if (aliasTarget) setSessionAlias(aliasTarget.entry.agentId, aliasTarget.entry.session.id, alias); }}
+      onClose={() => setAliasTarget(null)}
+    />
+    <ConfirmDialog open={!!deleteEntry} title={deleteEntry ? `${deleteEntry.kind === 'session' ? 'Kill' : 'Delete'} "${workspaceEntryDisplayTitle(deleteEntry, sessionAliases)}"?` : ''} message={deleteEntry?.kind === 'session' ? `This terminates the live PTY session. Real name: ${deleteEntry.session.name}` : 'This removes the workspace resource.'} confirmLabel={deleteEntry?.kind === 'session' ? 'Kill' : 'Delete'} confirmTone="danger" onConfirm={() => void confirmDelete()} onClose={() => setDeleteEntry(null)} />
   </div>;
 }

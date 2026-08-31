@@ -1,7 +1,7 @@
 import type { Agent, Relay } from '../types';
 
-export function agentDisplayLabel(agent: Agent): string {
-  return `${agent.relay_name} → ${agent.name}`;
+export function agentDisplayLabel(agent: Agent, daemonName = agent.name): string {
+  return `${agent.relay_name} → ${daemonName}`;
 }
 
 export function flattenRelayMachines(relays: Relay[]): Agent[] {
