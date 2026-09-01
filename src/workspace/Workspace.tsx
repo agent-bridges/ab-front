@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownUp, Cable, ChevronDown, ChevronRight, Columns2, FolderOpen, Keyboard, Link2,
-  LayoutGrid, Menu, Pencil, Plus, StickyNote, Terminal as TerminalIcon,
+  Eye, EyeOff, LayoutGrid, Menu, Pencil, Plus, StickyNote, Terminal as TerminalIcon,
   Trash2, Wrench, X,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
@@ -30,6 +30,7 @@ import ClientAliasDialog from '../components/ClientAliasDialog';
 import { daemonDisplayName, sessionAliasKey, useClientAliasStore } from '../stores/clientAliasStore';
 import { getAgentActivityLabel, getTerminalStatusMeta } from '../components/ProcessIndicator';
 import DaemonLinkDialog from '../components/DaemonLinkDialog';
+import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -173,6 +174,7 @@ export default function Workspace() {
   const [linkTarget, setLinkTarget] = useState<{ agent: Agent; relay: Relay } | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
+  const [showOffline, setShowOffline] = useShowOfflineMachines();
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const autoOpenedAgentsRef = useRef<Set<string>>(new Set());
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => {
@@ -238,6 +240,15 @@ export default function Workspace() {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter sessions and tools"
           className="min-w-0 flex-1 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs text-canvas-text outline-none focus:border-canvas-accent" />
         <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSort(sort === 'type' ? 'name' : sort === 'name' ? 'recent' : sort === 'recent' ? 'status' : 'type')} title={`Sort: ${sort}`}><ArrowDownUp size={13} /></button>
+        <button
+          className={`rounded p-1 hover:bg-canvas-border ${showOffline ? 'text-canvas-accent' : 'text-canvas-muted'}`}
+          onClick={() => setShowOffline(!showOffline)}
+          title={showOffline ? 'Hide offline machines' : 'Show offline machines'}
+          aria-label={showOffline ? 'Hide offline machines' : 'Show offline machines'}
+          aria-pressed={showOffline}
+        >
+          {showOffline ? <Eye size={13} /> : <EyeOff size={13} />}
+        </button>
         {canAdministerRelays && <button className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-semibold text-canvas-accent hover:bg-canvas-border" onClick={() => setRelayEditor({ relay: null, deleting: false })} title="Add relay"><Plus size={12} />Relay</button>}
         {isMobile && <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSidebarOpen(false)}><X size={14} /></button>}
       </div>
@@ -249,7 +260,7 @@ export default function Workspace() {
             <span className="font-normal normal-case">{relayStateLabel(relay)}</span>
             {canAdministerRelays && <><button className="rounded p-0.5 hover:bg-canvas-border" onClick={() => setRelayEditor({ relay, deleting: false })} title={`Edit ${relay.name}`}><Pencil size={11} /></button><button className="rounded p-0.5 text-red-400 hover:bg-red-500/10" onClick={() => setRelayEditor({ relay, deleting: true })} title={`Delete ${relay.name}`}><Trash2 size={11} /></button></>}
           </div>
-          {relay.machines.map((machine) => {
+          {filterOfflineMachines(relay.machines, showOffline).map((machine) => {
           const agent = agentById.get(machine.id);
           if (!agent) return null;
           const current = agent.id === currentAgentId;
@@ -275,7 +286,7 @@ export default function Workspace() {
             </div>}
           </div>;
           })}
-          {relay.machines.length === 0 && <div className={`${DESKTOP_TREE_DEPTH_CLASSES.daemonBranch} ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} py-1.5 text-[10px] text-canvas-muted`}>{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}
+          {filterOfflineMachines(relay.machines, showOffline).length === 0 && <div className={`${DESKTOP_TREE_DEPTH_CLASSES.daemonBranch} ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} py-1.5 text-[10px] text-canvas-muted`}>{!relay.enabled ? 'Relay disabled' : relay.machines.length > 0 ? 'Offline machines hidden' : 'No machines'}</div>}
         </div>)}
       </div>
       {!isMobile && <div className="absolute inset-y-0 -right-1 w-2 cursor-col-resize" onPointerDown={(event) => { resizeRef.current = { x: event.clientX, width: sidebarWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (resizeRef.current) setSidebarWidth(resizeRef.current.width + event.clientX - resizeRef.current.x); }} onPointerUp={() => { resizeRef.current = null; }} />}

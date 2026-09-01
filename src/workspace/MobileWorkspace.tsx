@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Cable, FolderOpen, GripVertical, Keyboard, LayoutGrid, Lock, LogOut, Menu,
+  Cable, Eye, EyeOff, FolderOpen, GripVertical, Keyboard, LayoutGrid, Lock, LogOut, Menu,
   Link2, Minus, Pencil, Plus, RotateCw, StickyNote, Terminal as TerminalIcon,
   Trash2, User, Wrench, X,
 } from 'lucide-react';
@@ -32,6 +32,7 @@ import ClientAliasDialog from '../components/ClientAliasDialog';
 import type { Agent } from '../types';
 import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { daemonDisplayName, sessionAliasKey, sessionDisplayName, useClientAliasStore } from '../stores/clientAliasStore';
+import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -173,6 +174,7 @@ export default function MobileWorkspace() {
   const [linkTarget, setLinkTarget] = useState<{ agent: Agent; relay: Relay } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteEntry, setDeleteEntry] = useState<MobileEntry | null>(null);
+  const [showOffline, setShowOffline] = useShowOfflineMachines();
   const gridRef = useRef<HTMLDivElement>(null);
 
   const entries = useMemo<MobileEntry[]>(() => {
@@ -280,13 +282,25 @@ export default function MobileWorkspace() {
           {agentMenuOpen && <>
             <button className="fixed inset-0 z-[70]" onClick={() => setAgentMenuOpen(false)} aria-label="Close agent menu" />
             <div className="absolute left-0 top-full z-[71] mt-1 max-h-[60vh] min-w-[240px] overflow-y-auto rounded border border-canvas-border bg-canvas-surface py-1 shadow-lg">
+              <div className="flex items-center border-b border-canvas-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted">
+                <span className="min-w-0 flex-1">Machines</span>
+                <button
+                  className={`rounded p-1 hover:bg-canvas-border ${showOffline ? 'text-canvas-accent' : 'text-canvas-muted'}`}
+                  onClick={() => setShowOffline(!showOffline)}
+                  title={showOffline ? 'Hide offline machines' : 'Show offline machines'}
+                  aria-label={showOffline ? 'Hide offline machines' : 'Show offline machines'}
+                  aria-pressed={showOffline}
+                >
+                  {showOffline ? <Eye size={14} /> : <EyeOff size={14} />}
+                </button>
+              </div>
               {relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}>
                 <div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted">
                   <span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} />
                   <span className="min-w-0 flex-1 truncate">{relay.name}</span><span className="font-normal normal-case">{relayStateLabel(relay)}</span>
                   {canAdministerRelays && <><button className="rounded p-0.5 hover:bg-canvas-border" onClick={() => { setRelayEditor({ relay, deleting: false }); setAgentMenuOpen(false); }} title={`Edit ${relay.name}`}><Pencil size={11} /></button><button className="rounded p-0.5 text-red-400 hover:bg-red-500/10" onClick={() => { setRelayEditor({ relay, deleting: true }); setAgentMenuOpen(false); }} title={`Delete ${relay.name}`}><Trash2 size={11} /></button></>}
                 </div>
-                {relay.machines.map((machine) => {
+                {filterOfflineMachines(relay.machines, showOffline).map((machine) => {
                   const agent = agentById.get(machine.id); if (!agent) return null;
                   return <div key={agent.id} className={`flex w-full items-center text-xs ${agent.id === currentAgentId ? 'bg-canvas-accent/10 text-canvas-accent' : ''} ${!machine.online ? 'opacity-60' : ''}`}>
                     <button disabled={!relayCanConnect(relay) || !machine.online} onClick={() => { setCurrentAgent(agent.id); setAgentMenuOpen(false); }} className="flex min-w-0 flex-1 items-center gap-2 px-5 py-2 text-left hover:bg-canvas-border disabled:cursor-default"><span className={`h-1.5 w-1.5 rounded-full ${machine.online ? 'bg-emerald-500' : 'bg-canvas-muted'}`} /><span className="min-w-0 flex-1 truncate">{daemonDisplayName(agent, daemonAliases)}</span>{!machine.online && <span className="text-[9px]">offline</span>}</button>
@@ -294,7 +308,7 @@ export default function MobileWorkspace() {
                     <button className="mr-2 rounded p-1 hover:bg-canvas-border" onClick={() => { setAliasTarget({ kind: 'daemon', agent }); setAgentMenuOpen(false); }} title={`Set local label for ${agent.name}`}><Pencil size={12} /></button>
                   </div>;
                 })}
-                {relay.machines.length === 0 && <div className="px-5 py-2 text-[10px] text-canvas-muted">{relay.enabled ? 'No machines' : 'Relay disabled'}</div>}
+                {filterOfflineMachines(relay.machines, showOffline).length === 0 && <div className="px-5 py-2 text-[10px] text-canvas-muted">{!relay.enabled ? 'Relay disabled' : relay.machines.length > 0 ? 'Offline machines hidden' : 'No machines'}</div>}
               </div>)}
               {canAdministerRelays && <button onClick={() => { setRelayEditor({ relay: null, deleting: false }); setAgentMenuOpen(false); }} className="mt-1 flex w-full items-center gap-2 border-t border-canvas-border px-3 py-2 text-xs font-semibold text-canvas-accent hover:bg-canvas-border"><Plus size={14} />Add relay</button>}
             </div>
