@@ -15,7 +15,6 @@ import CodexIcon from '../components/icons/CodexIcon';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
 import TerminalView from '../components/terminal/TerminalView';
-import TerminalAttachMenu from '../components/terminal/TerminalAttachMenu';
 import TunnelsView from '../components/tunnels/TunnelsView';
 import ConfirmDialog from '../components/dialogs/ConfirmDialog';
 import { useAgentStore } from '../stores/agentStore';
@@ -344,7 +343,7 @@ export default function MobileWorkspace() {
             {canCreate && <button onClick={() => setCreateOpen(true)} className="flex h-[102px] w-[72px] items-center justify-center rounded-xl border border-dashed border-canvas-border active:opacity-70" title="Create"><Plus size={20} className="text-canvas-muted" /></button>}
           </div>
         </div> : <section key={`${activeEntry.key}-${refreshKey}`} className="absolute inset-0 flex min-h-0 flex-col bg-canvas-bg" style={{ bottom: TAB_HEIGHT }}>
-          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryDisplayTitle(activeEntry, sessionAliases)}</span><AgentActivityBadge entry={activeEntry} className="max-w-32 shrink-0 text-[9px]" />{activeEntry.kind === 'session' && <TerminalAttachMenu agent={agentById.get(activeEntry.agentId)} ptyId={activeEntry.session.id} />}<button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
+          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryDisplayTitle(activeEntry, sessionAliases)}</span><AgentActivityBadge entry={activeEntry} className="max-w-32 shrink-0 text-[9px]" /><button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
           <div className="min-h-0 flex-1"><EntryBody entry={activeEntry} /></div>
         </section>}
 

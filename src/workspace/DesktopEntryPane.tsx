@@ -3,10 +3,9 @@ import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
 import { forceRefresh as forceTerminalRefresh } from '../components/terminal/TerminalCache';
 import TerminalView from '../components/terminal/TerminalView';
-import TerminalAttachMenu from '../components/terminal/TerminalAttachMenu';
 import TunnelsView from '../components/tunnels/TunnelsView';
 import { useNoteViewMode } from '../hooks/useNoteViewMode';
-import type { Agent, BoardItem, PtySession } from '../types';
+import type { BoardItem, PtySession } from '../types';
 import { getAgentActivityLabel, getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
 import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
@@ -44,14 +43,12 @@ export const DESKTOP_TERMINAL_PANE_ACTIONS = ['refresh', 'hide', 'delete'] as co
 
 export default function DesktopEntryPane({
   entry,
-  agent,
   active = false,
   onActivate,
   onHide,
   onDelete,
 }: {
   entry: WorkspaceEntry;
-  agent?: Agent | null;
   active?: boolean;
   onActivate?: () => void;
   onHide: () => void;
@@ -75,7 +72,6 @@ export default function DesktopEntryPane({
           {title}
         </span>
         {activity && <span className={`max-w-40 shrink-0 truncate text-[9px] ${activity.className}`} title={activity.text}>{activity.text}</span>}
-        {entry.kind === 'session' && <TerminalAttachMenu agent={agent} ptyId={entry.session.id} />}
         {entry.kind === 'session' && (
           <button
             className="rounded p-1 text-canvas-muted hover:bg-canvas-border hover:text-canvas-accent"
