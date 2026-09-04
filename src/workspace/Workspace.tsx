@@ -104,7 +104,7 @@ function RenameInput({ value, onSave, onCancel }: { value: string; onSave: (name
   );
 }
 
-function GroupBody({ entries, layout, onHide, onDelete }: { entries: WorkspaceEntry[]; layout: IdeGroupLayout; onHide: (entry: WorkspaceEntry) => void; onDelete: (entry: WorkspaceEntry) => void }) {
+function GroupBody({ entries, layout, agentsById, onHide, onDelete }: { entries: WorkspaceEntry[]; layout: IdeGroupLayout; agentsById: Map<string, Agent>; onHide: (entry: WorkspaceEntry) => void; onDelete: (entry: WorkspaceEntry) => void }) {
   const style = layout === 'h2' || layout === 'h3'
     ? { gridTemplateRows: `repeat(${entries.length}, minmax(0, 1fr))`, gridTemplateColumns: 'minmax(0, 1fr)' }
     : layout === 'grid'
@@ -114,7 +114,7 @@ function GroupBody({ entries, layout, onHide, onDelete }: { entries: WorkspaceEn
     <div className="grid min-h-0 flex-1 gap-1 bg-canvas-border p-1" style={style}>
       {entries.map((entry) => (
         <div key={entry.key} className="flex min-h-0 min-w-0 flex-col bg-canvas-bg">
-          <DesktopEntryPane entry={entry} onHide={() => onHide(entry)} onDelete={() => onDelete(entry)} />
+          <DesktopEntryPane entry={entry} agent={agentsById.get(entry.agentId)} onHide={() => onHide(entry)} onDelete={() => onDelete(entry)} />
         </div>
       ))}
     </div>
@@ -330,13 +330,13 @@ export default function Workspace() {
           })}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          {focusedEntry ? <DesktopEntryPane entry={focusedEntry} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
+          {focusedEntry ? <DesktopEntryPane entry={focusedEntry} agent={agentById.get(focusedEntry.agentId)} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
             <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-2">
               <input value={focusedGroup.name} onChange={(event) => renameGroup(focusedGroup.id, event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs outline-none" />
               <select value={focusedGroup.layout} onChange={(event) => setGroupLayout(focusedGroup.id, event.target.value as IdeGroupLayout)} className="rounded border border-canvas-border bg-canvas-bg px-1 text-xs"><option value="v2">Columns</option><option value="h2">Rows</option><option value="grid">Grid</option></select>
               <button onClick={() => deleteGroup(focusedGroup.id)} className="rounded p-1 text-red-400 hover:bg-red-500/10"><Trash2 size={12} /></button>
             </div>
-            <GroupBody entries={focusedGroup.members.flatMap((id) => { const entry = entryMap.get(id); return entry ? [entry] : []; })} layout={focusedGroup.layout} onHide={(entry) => removeGroupMember(focusedGroup.id, entry.key)} onDelete={setDeleteEntry} />
+            <GroupBody entries={focusedGroup.members.flatMap((id) => { const entry = entryMap.get(id); return entry ? [entry] : []; })} layout={focusedGroup.layout} agentsById={agentById} onHide={(entry) => removeGroupMember(focusedGroup.id, entry.key)} onDelete={setDeleteEntry} />
           </> : <div className="flex flex-1 items-center justify-center text-sm text-canvas-muted"><div className="text-center"><TerminalIcon size={30} className="mx-auto mb-3 opacity-40" /><div>Select a session from the workspace tree.</div>{capabilities.relayRoutes && <button className="mt-3 rounded border border-canvas-border px-3 py-1.5 text-xs hover:bg-canvas-border" onClick={() => void newTerminal()}><Plus size={12} className="mr-1 inline" />New terminal</button>}</div></div>}
         </div>
       </main>

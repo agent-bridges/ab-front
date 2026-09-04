@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import DesktopEntryPane, { DESKTOP_TERMINAL_PANE_ACTIONS, type WorkspaceEntry } from './DesktopEntryPane';
+import { TERMINAL_ATTACH_ACTIONS } from '../components/terminal/TerminalAttachMenu';
 import { useWorkspaceStore } from '../stores/workspaceStore';
+import type { Agent } from '../types';
 
 const terminalEntry: WorkspaceEntry = {
   key: 'session:pty-1',
@@ -20,17 +22,28 @@ const terminalEntry: WorkspaceEntry = {
   },
 };
 
+const terminalAgent: Agent = {
+  id: `home~${'ab'.repeat(32)}`,
+  name: 'daemon',
+  relay_id: 'home',
+  relay_name: 'Home',
+  fingerprint: 'ab'.repeat(32),
+  online: true,
+};
+
 describe('desktop entry pane toolbar', () => {
   it('renders the historical terminal refresh, hide and delete controls', () => {
     const markup = renderToStaticMarkup(
-      <DesktopEntryPane entry={terminalEntry} active onHide={() => {}} onDelete={() => {}} />,
+      <DesktopEntryPane entry={terminalEntry} agent={terminalAgent} active onHide={() => {}} onDelete={() => {}} />,
     );
 
     expect(DESKTOP_TERMINAL_PANE_ACTIONS).toEqual(['refresh', 'hide', 'delete']);
+    expect(TERMINAL_ATTACH_ACTIONS).toEqual(['open-native', 'copy-command']);
     for (const action of DESKTOP_TERMINAL_PANE_ACTIONS) {
       expect(markup).toContain(`data-pane-action="${action}"`);
     }
     expect(markup).toContain('data-desktop-entry-pane="session:pty-1"');
+    expect(markup).toContain('data-pane-action="attach-menu"');
     expect(markup).toContain('Refresh terminal api-refactor');
     expect(markup).toContain('Hide api-refactor');
     expect(markup).toContain('Kill api-refactor');
