@@ -74,7 +74,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   load: async (agentId) => {
     if (!agentId) { set({ agentId: null, boardItems: [], loaded: true, loadError: null, ...DEFAULT_PREFS }); return; }
     const prefs = loadPrefs(agentId);
-    set({ agentId, boardItems: [], loaded: false, loadError: null, ...prefs });
+    // A board_items_changed notification is a background refresh, not a
+    // navigation. Keep the current entries mounted while their replacement is
+    // fetched; clearing them here makes active Files/Notes panes flash and
+    // resets their local UI state on every daemon notification.
+    if (get().agentId === agentId) {
+      set({ loaded: false, loadError: null });
+    } else {
+      set({ agentId, boardItems: [], loaded: false, loadError: null, ...prefs });
+    }
     try {
       const boardItems = await fetchBoardItems(agentId);
       if (get().agentId === agentId) set({ boardItems, loaded: true, loadError: null });
@@ -108,9 +116,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     return item.id;
   },
   updateBoardItem: (id, patch) => {
-    set((state) => ({ boardItems: state.boardItems.map((item) => item.id === id ? { ...item, ...patch } : item) }));
-    const item = get().boardItems.find((candidate) => candidate.id === id);
-    if (item) void saveBoardItem(item).catch((error) => console.error('Failed to save workspace resource:', error));
+    const current = get().boardItems.find((candidate) => candidate.id === id);
+    if (!current) return;
+    // FileBrowser resolves '~' to an absolute path on mount. Once that path is
+    // already stored, repeated loads must not write the identical board item:
+    // every write produces board_items_changed and used to form a refresh loop.
+    const changed = Object.entries(patch).some(([key, value]) => current[key as keyof BoardItem] !== value);
+    if (!changed) return;
+    const next = { ...current, ...patch };
+    set((state) => ({ boardItems: state.boardItems.map((item) => item.id === id ? next : item) }));
+    void saveBoardItem(next).catch((error) => console.error('Failed to save workspace resource:', error));
   },
   removeBoardItem: async (id) => {
     await deleteBoardItem(id, get().agentId);
