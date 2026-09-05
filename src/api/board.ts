@@ -13,6 +13,24 @@ interface CanvasBoardItem {
 
 const BOARD_TYPES = new Set<BoardItemType>(['filebrowser', 'notes', 'tunnels']);
 
+const DEFAULT_LABELS: Record<BoardItemType, string> = {
+  filebrowser: 'Files',
+  notes: 'Notes',
+  tunnels: 'Tunnels',
+};
+
+/**
+ * Older canvas entries stored their auto-resource identity in `label`, for
+ * example `__auto__:filebrowser:Files`. The id remains useful internally, but
+ * the technical prefix must never become user-facing text.
+ */
+export function boardItemLabel(type: BoardItemType, label?: string): string {
+  if (!label) return DEFAULT_LABELS[type];
+  const legacyPrefix = `__auto__:${type}:`;
+  if (!label.startsWith(legacyPrefix)) return label;
+  return label.slice(legacyPrefix.length).trim() || DEFAULT_LABELS[type];
+}
+
 export async function fetchBoardItems(agentId: string | null): Promise<BoardItem[]> {
   if (!agentId) return [];
   const response = await authFetch(`/api/canvas?agent_id=${encodeURIComponent(agentId)}`);
@@ -33,7 +51,7 @@ export async function fetchBoardItems(agentId: string | null): Promise<BoardItem
     return {
       id: item.id,
       type: item.type as BoardItemType,
-      label: item.label || (item.type === 'filebrowser' ? 'Files' : item.type === 'notes' ? 'Notes' : 'Tunnels'),
+      label: boardItemLabel(item.type as BoardItemType, item.label),
       agentId: item.agentId || agentId,
       noteContent: item.noteContent,
       currentPath: item.currentPath,

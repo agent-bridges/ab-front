@@ -32,4 +32,26 @@ describe('workspace resource API', () => {
     })));
     await expect(fetchBoardItems('home~machine')).resolves.toEqual([]);
   });
+
+  it('hides legacy auto-resource prefixes from labels', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify([{
+      id: 'item-1',
+      type: 'filebrowser',
+      label: '__auto__:filebrowser:Files',
+      agentId: 'home~machine',
+      currentPath: '/tmp',
+    }]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })));
+
+    await expect(fetchBoardItems('home~machine')).resolves.toEqual([{
+      id: 'item-1',
+      type: 'filebrowser',
+      label: 'Files',
+      agentId: 'home~machine',
+      currentPath: '/tmp',
+      noteContent: undefined,
+    }]);
+  });
 });
