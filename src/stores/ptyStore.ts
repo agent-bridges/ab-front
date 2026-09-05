@@ -9,6 +9,7 @@ interface PtyState {
   replaceSessions: (agentId: string, sessions: PtySession[]) => void;
   clear: () => void;
   setConnected: (connected: boolean) => void;
+  setSessionLabel: (sessionId: string, label: string) => void;
 }
 
 export const usePtyStore = create<PtyState>((set) => ({
@@ -23,4 +24,9 @@ export const usePtyStore = create<PtyState>((set) => ({
   }),
   clear: () => set({ agentId: null, sessionsById: {}, sessionIdByName: {}, connected: false }),
   setConnected: (connected) => set({ connected }),
+  setSessionLabel: (sessionId, label) => set((state) => ({
+    sessionsById: state.sessionsById[sessionId]
+      ? { ...state.sessionsById, [sessionId]: { ...state.sessionsById[sessionId], label } }
+      : state.sessionsById,
+  })),
 }));

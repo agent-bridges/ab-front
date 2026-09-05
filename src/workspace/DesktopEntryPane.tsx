@@ -10,7 +10,7 @@ import { getAgentActivityLabel, getTerminalStatusMeta, PROCESS_STATUS_THEME } fr
 import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
 import { Cable, FolderOpen, StickyNote, Terminal as TerminalIcon } from 'lucide-react';
-import { sessionDisplayName, useClientAliasStore } from '../stores/clientAliasStore';
+import { sessionDisplayName } from '../stores/clientAliasStore';
 
 export type WorkspaceEntry =
   | { key: string; kind: 'session'; agentId: string; session: PtySession }
@@ -18,8 +18,8 @@ export type WorkspaceEntry =
 
 export const workspaceEntryTitle = (entry: WorkspaceEntry) => entry.kind === 'session' ? entry.session.name : entry.item.label;
 
-export const workspaceEntryDisplayTitle = (entry: WorkspaceEntry, aliases: Record<string, string>) =>
-  entry.kind === 'session' ? sessionDisplayName(entry.agentId, entry.session, aliases) : entry.item.label;
+export const workspaceEntryDisplayTitle = (entry: WorkspaceEntry) =>
+  entry.kind === 'session' ? sessionDisplayName(entry.session) : entry.item.label;
 
 export function WorkspaceEntryIcon({ entry, size = 13 }: { entry: WorkspaceEntry; size?: number }) {
   if (entry.kind === 'board') {
@@ -54,8 +54,7 @@ export default function DesktopEntryPane({
   onHide: () => void;
   onDelete: () => void;
 }) {
-  const sessionAliases = useClientAliasStore((state) => state.sessions);
-  const title = workspaceEntryDisplayTitle(entry, sessionAliases);
+  const title = workspaceEntryDisplayTitle(entry);
   const activity = entry.kind === 'session'
     ? getAgentActivityLabel(getTerminalStatusMeta(entry.session.alive, entry.session.processes, entry.session.ai_status))
     : null;

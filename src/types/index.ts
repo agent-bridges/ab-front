@@ -58,6 +58,7 @@ export interface ProcessInfo {
 export interface PtySession {
   id: string;
   name: string;
+  label?: string;
   project_path: string;
   last_cwd?: string;
   created_at: string;

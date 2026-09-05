@@ -13,6 +13,7 @@ interface AgentState {
   discoveryError: string | null;
   reset: () => void;
   setCurrentAgent: (id: string) => void;
+  setAgentName: (id: string, name: string) => void;
   refreshCurrentAgentBoard: () => void;
   loadRelays: (preferredAgentId?: string | null) => Promise<void>;
 }
@@ -35,6 +36,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     discoveryError: null,
   }),
   setCurrentAgent: (id) => set({ currentAgentId: id }),
+  setAgentName: (id, name) => set((state) => ({
+    agents: state.agents.map((agent) => agent.id === id ? { ...agent, name } : agent),
+    relays: state.relays.map((relay) => ({
+      ...relay,
+      machines: relay.machines.map((machine) => machine.id === id ? { ...machine, name } : machine),
+    })),
+  })),
   refreshCurrentAgentBoard: () => set((state) => ({ boardRefreshToken: state.boardRefreshToken + 1 })),
 
   loadRelays: async (preferredAgentId) => {

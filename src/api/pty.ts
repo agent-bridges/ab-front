@@ -51,3 +51,21 @@ export async function renamePty(agentId: string, sessionId: string, name: string
   });
   return readJsonOrThrow(res, 'Failed to rename PTY session');
 }
+
+export async function setPtyLabel(agentId: string, sessionId: string, label: string) {
+  const res = await authFetch(`/api/agents/${encodeURIComponent(agentId)}/pty/${encodeURIComponent(sessionId)}/label`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  return readJsonOrThrow(res, 'Failed to change PTY label');
+}
+
+export async function renameDaemon(agentId: string, name: string) {
+  const res = await authFetch(`/api/agents/${encodeURIComponent(agentId)}/name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return readJsonOrThrow(res, 'Failed to rename daemon');
+}
