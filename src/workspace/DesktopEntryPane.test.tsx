@@ -36,6 +36,19 @@ describe('desktop entry pane toolbar', () => {
     expect(markup).toContain('Kill api-refactor');
   });
 
+  it('uses the client icon and status dot without duplicating textual activity', () => {
+    const markup = renderToStaticMarkup(
+      <DesktopEntryPane
+        entry={{ ...terminalEntry, session: { ...terminalEntry.session, processes: [{ pid: 1, cmd: 'codex', args: '' }], ai_status: 'working' } }}
+        onHide={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+
+    expect(markup).toContain('bg-orange-400 animate-pulse');
+    expect(markup).not.toContain('Codex · working');
+  });
+
   it('hides a grouped pane by removing only its group membership', () => {
     const original = useWorkspaceStore.getState();
     Object.defineProperty(globalThis, 'localStorage', {

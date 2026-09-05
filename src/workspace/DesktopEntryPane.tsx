@@ -6,7 +6,7 @@ import TerminalView from '../components/terminal/TerminalView';
 import TunnelsView from '../components/tunnels/TunnelsView';
 import { useNoteViewMode } from '../hooks/useNoteViewMode';
 import type { BoardItem, PtySession } from '../types';
-import { getAgentActivityLabel, getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
+import { getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
 import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
 import { Cable, FolderOpen, StickyNote, Terminal as TerminalIcon } from 'lucide-react';
@@ -55,9 +55,6 @@ export default function DesktopEntryPane({
   onDelete: () => void;
 }) {
   const title = workspaceEntryDisplayTitle(entry);
-  const activity = entry.kind === 'session'
-    ? getAgentActivityLabel(getTerminalStatusMeta(entry.session.alive, entry.session.processes, entry.session.ai_status))
-    : null;
   // Board preferences historically used the raw canvas/board item id. Keep
   // that key stable instead of changing it to the Workspace `board:` key.
   const preferenceId = entry.kind === 'board' ? entry.item.id : entry.key;
@@ -70,7 +67,6 @@ export default function DesktopEntryPane({
         <span className={`min-w-0 flex-1 truncate text-[10px] ${active ? 'font-medium text-canvas-accent' : 'text-canvas-muted'}`} title={title}>
           {title}
         </span>
-        {activity && <span className={`max-w-40 shrink-0 truncate text-[9px] ${activity.className}`} title={activity.text}>{activity.text}</span>}
         {entry.kind === 'session' && (
           <button
             className="rounded p-1 text-canvas-muted hover:bg-canvas-border hover:text-canvas-accent"

@@ -28,8 +28,8 @@ export const PROCESS_STATUS_THEME: Record<
     borderClass: 'border-green-400/60',
   },
   'busy': {
-    dotClass: 'bg-blue-400 animate-pulse',
-    borderClass: 'border-blue-400/60',
+    dotClass: 'bg-orange-400 animate-pulse',
+    borderClass: 'border-orange-400/60',
   },
   'idle': {
     dotClass: 'bg-green-400',

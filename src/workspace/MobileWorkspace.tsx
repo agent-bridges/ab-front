@@ -9,7 +9,7 @@ import { createPty, killPty, renameDaemon, setPtyLabel } from '../api/pty';
 import {
   MobileAccountPanel, MobileAuthPanel, MobileVisualPanel,
 } from '../components/MobileSettingsPanel';
-import { getAgentActivityLabel, getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
+import { getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
 import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
@@ -96,13 +96,6 @@ function EntryBody({ entry }: { entry: MobileEntry }) {
   if (entry.item.type === 'filebrowser') return <FileBrowserView item={entry.item} />;
   if (entry.item.type === 'notes') return <NotesEditor item={entry.item} />;
   return <TunnelsView item={entry.item} />;
-}
-
-function AgentActivityBadge({ entry, className = '' }: { entry: MobileEntry; className?: string }) {
-  if (entry.kind !== 'session') return null;
-  const activity = getAgentActivityLabel(getTerminalStatusMeta(entry.session.alive, entry.session.processes, entry.session.ai_status));
-  if (!activity) return null;
-  return <span className={`truncate text-[8px] font-medium ${activity.className} ${className}`} title={activity.text}>{activity.text}</span>;
 }
 
 function LogoutDialog({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
@@ -336,12 +329,11 @@ export default function MobileWorkspace() {
             {orderedEntries.map((entry) => <button key={entry.key} data-mobile-entry={entry.key} aria-label={mobileEntryDisplayTitle(entry)} title={mobileEntryDisplayTitle(entry)} onPointerDown={(event) => { if (dragMode) { event.preventDefault(); setDraggingKey(entry.key); } }} onClick={() => { if (dragMode) return; if (deleteMode) { setDeleteEntry(entry); return; } activate(entry); }} onContextMenu={(event) => { event.preventDefault(); if (!dragMode && !deleteMode) setContextEntry(entry); }} className={`relative flex h-[102px] w-[72px] select-none flex-col items-center justify-center rounded-xl ${activeKey === entry.key ? 'bg-canvas-accent/10' : 'bg-canvas-surface'} ${draggingKey === entry.key ? 'opacity-30' : ''} ${dragMode || deleteMode ? 'animate-[wiggle_0.3s_ease-in-out_infinite_alternate]' : 'active:opacity-70'}`}>
               {deleteMode && <span className="absolute -right-1 -top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500"><X size={10} className="text-white" /></span>}
               <EntryIcon entry={entry} /><span className="mt-1 min-h-6 max-w-16 overflow-hidden text-center text-[10px] font-semibold leading-3" style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: MOBILE_TILE_LABEL_LINES }}>{mobileEntryDisplayTitle(entry)}</span>
-              <AgentActivityBadge entry={entry} className="mt-0.5 max-w-16" />
             </button>)}
             {canCreate && <button onClick={() => setCreateOpen(true)} className="flex h-[102px] w-[72px] items-center justify-center rounded-xl border border-dashed border-canvas-border active:opacity-70" title="Create"><Plus size={20} className="text-canvas-muted" /></button>}
           </div>
         </div> : <section key={`${activeEntry.key}-${refreshKey}`} className="absolute inset-0 flex min-h-0 flex-col bg-canvas-bg" style={{ bottom: TAB_HEIGHT }}>
-          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryDisplayTitle(activeEntry)}</span><AgentActivityBadge entry={activeEntry} className="max-w-32 shrink-0 text-[9px]" /><button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
+          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryDisplayTitle(activeEntry)}</span><button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
           <div className="min-h-0 flex-1"><EntryBody entry={activeEntry} /></div>
         </section>}
 
