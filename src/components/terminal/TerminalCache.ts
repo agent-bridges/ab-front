@@ -10,6 +10,7 @@ export interface CachedTerminal {
   ptyId: string;
   lastUsed: number;
   stickyToBottom: boolean;
+  onFilePath?: (path: string) => void;
 }
 
 const CACHE_KEY = '__ab2_terminal_cache__';

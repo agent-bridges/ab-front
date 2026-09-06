@@ -39,9 +39,7 @@ export async function deleteFile(agentId: string, path: string): Promise<void> {
 }
 
 export async function downloadFile(agentId: string, path: string): Promise<void> {
-  const res = await authFetch(`/api/agents/${agentId}/fs/download?path=${encodeURIComponent(path)}`);
-  if (!res.ok) await throwFromResponse(res, 'Failed to download');
-  const blob = await res.blob();
+  const blob = await fetchFileBlob(agentId, path);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -50,6 +48,12 @@ export async function downloadFile(agentId: string, path: string): Promise<void>
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export async function fetchFileBlob(agentId: string, path: string): Promise<Blob> {
+  const res = await authFetch(`/api/agents/${agentId}/fs/download?path=${encodeURIComponent(path)}`);
+  if (!res.ok) await throwFromResponse(res, 'Failed to download');
+  return res.blob();
 }
 
 export async function uploadFile(agentId: string, destPath: string, file: File): Promise<void> {

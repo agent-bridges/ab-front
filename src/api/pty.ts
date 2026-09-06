@@ -61,6 +61,15 @@ export async function setPtyLabel(agentId: string, sessionId: string, label: str
   return readJsonOrThrow(res, 'Failed to change PTY label');
 }
 
+export async function sendPtyText(agentId: string, sessionId: string, text: string, enter = true) {
+  const res = await authFetch(`/api/agents/${encodeURIComponent(agentId)}/pty/${encodeURIComponent(sessionId)}/stdin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, enter }),
+  });
+  return readJsonOrThrow<{ ok: boolean; bytes: number; bracketed_paste: boolean }>(res, 'Failed to send terminal input');
+}
+
 export async function renameDaemon(agentId: string, name: string) {
   const res = await authFetch(`/api/agents/${encodeURIComponent(agentId)}/name`, {
     method: 'PATCH',

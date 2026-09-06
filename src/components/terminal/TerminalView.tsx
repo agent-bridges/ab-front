@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTerminal } from '../../hooks/useTerminal';
 import { useKeyboardStore } from '../../stores/keyboardStore';
 import type { PtySession } from '../../types';
+import TerminalFileExchange from './TerminalFileExchange';
 
 export default function TerminalView({ session, agentId }: { session: PtySession; agentId: string }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const pathOpenerRef = useRef<(path: string) => void>(() => {});
   const [error, setError] = useState<string | null>(null);
-  useTerminal(session, agentId, wrapperRef, setError);
+  const openFilePath = useCallback((path: string) => pathOpenerRef.current(path), []);
+  const registerPathOpener = useCallback((opener: (path: string) => void) => { pathOpenerRef.current = opener; }, []);
+  useTerminal(session, agentId, wrapperRef, setError, openFilePath);
 
   // Register this terminal as the floating-keyboard target whenever the user
   // interacts with it. xterm puts the real input on a hidden textarea, so we
@@ -43,6 +47,7 @@ export default function TerminalView({ session, agentId }: { session: PtySession
           </div>
         </div>
       )}
+      {!error && <TerminalFileExchange session={session} agentId={agentId} registerPathOpener={registerPathOpener} />}
     </div>
   );
 }

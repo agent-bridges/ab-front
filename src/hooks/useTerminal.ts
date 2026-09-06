@@ -6,6 +6,7 @@ import { getCache, evictOldest } from '../components/terminal/TerminalCache';
 import type { CachedTerminal } from '../components/terminal/TerminalCache';
 import { followTerminalTail, isTerminalAtBottom } from '../components/terminal/terminalViewport';
 import { getTerminalFontSize } from '../components/MobileSettingsPanel';
+import { createTerminalFileLinkProvider } from '../components/terminal/terminalFileLinkProvider';
 
 const TERMINAL_OPTIONS = {
   cursorBlink: true,
@@ -86,6 +87,7 @@ export function useTerminal(
   agentId: string,
   wrapperRef: React.RefObject<HTMLDivElement | null>,
   setError: (err: string | null) => void,
+  onFilePath?: (path: string) => void,
 ) {
   const activeCached = useRef<CachedTerminal | null>(null);
   const resizeObserver = useRef<ResizeObserver | null>(null);
@@ -111,6 +113,7 @@ export function useTerminal(
       const cached = cache.get(ptyId)!;
       cached.lastUsed = Date.now();
       activeCached.current = cached;
+      cached.onFilePath = onFilePath;
 
       if (!wrapper.contains(cached.container)) {
         wrapper.appendChild(cached.container);
@@ -216,6 +219,8 @@ export function useTerminal(
     };
 
     cache.set(ptyId, cached);
+    cached.onFilePath = onFilePath;
+    term.registerLinkProvider(createTerminalFileLinkProvider(term, (path) => cached.onFilePath?.(path)));
     evictOldest(ptyId);
     activeCached.current = cached;
 
@@ -230,7 +235,7 @@ export function useTerminal(
       scrollToBottomIfNeeded(term, cached.stickyToBottom);
       lastSize.current = { rows: term.rows, cols: term.cols };
     });
-  }, [agentId, session.id, needsFullscreenRedraw, wrapperRef, setError]);
+  }, [agentId, session.id, needsFullscreenRedraw, onFilePath, wrapperRef, setError]);
 
   const flushResize = useCallback(() => {
     const cached = activeCached.current;
@@ -362,6 +367,7 @@ export function useTerminal(
       }
       document.removeEventListener('paste', handlePaste, true);
       if (activeCached.current) {
+        activeCached.current.onFilePath = undefined;
         activeCached.current.container.style.display = 'none';
       }
     };
