@@ -3,6 +3,7 @@ import {
   attachmentPrompt,
   filePathAt,
   findTerminalFileLinks,
+  hasCommonFileExtension,
   isPreviewableText,
   normalizePosixPath,
   resolveTerminalFilePath,
@@ -36,6 +37,11 @@ describe('terminal file links', () => {
     expect(isPreviewableText('config.toml')).toBe(true);
     expect(isPreviewableText('Dockerfile')).toBe(true);
     expect(isPreviewableText('archive.zip')).toBe(false);
+  });
+
+  it('recognises a complete file only after a hard-wrapped path suffix is joined', () => {
+    expect(hasCommonFileExtension('/apps/demo/latest-cleaned-')).toBe(false);
+    expect(hasCommonFileExtension('/apps/demo/latest-cleaned-' + '62969.png')).toBe(true);
   });
 });
 

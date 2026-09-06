@@ -87,6 +87,11 @@ function looksLikeFilePath(value: string) {
   return extension.length >= 1 && extension.length <= 10 && /^[a-z0-9]+$/.test(extension) && COMMON_FILE_EXTENSIONS.has(extension);
 }
 
+export function hasCommonFileExtension(value: string): boolean {
+  const extension = value.includes('.') ? value.slice(value.lastIndexOf('.') + 1).toLowerCase() : '';
+  return extension.length >= 1 && extension.length <= 10 && /^[a-z0-9]+$/.test(extension) && COMMON_FILE_EXTENSIONS.has(extension);
+}
+
 export function filePathAt(text: string, offset: number): TerminalFileLink | null {
   if (offset < 0 || offset >= text.length) return null;
 

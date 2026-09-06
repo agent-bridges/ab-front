@@ -1,5 +1,5 @@
 import type { IBufferLine, ILink, ILinkProvider, Terminal } from '@xterm/xterm';
-import { findTerminalFileLinks } from './terminalFiles';
+import { findTerminalFileLinks, hasCommonFileExtension } from './terminalFiles';
 
 const MAX_LOGICAL_LINE_LENGTH = 2048;
 
@@ -67,6 +67,43 @@ function mapStringIndex(terminal: Terminal, lineIndex: number, rowIndex: number,
   return [lineIndex, start];
 }
 
+function hardWrappedFileLink(
+  terminal: Terminal,
+  firstLineIndex: number,
+  secondLineIndex: number,
+  onPath: (path: string) => void,
+): ILink | null {
+  const firstLine = terminal.buffer.active.getLine(firstLineIndex);
+  const secondLine = terminal.buffer.active.getLine(secondLineIndex);
+  if (!firstLine || !secondLine || secondLine.isWrapped) return null;
+
+  const firstText = firstLine.translateToString(true);
+  if (firstText.length < terminal.cols - 2) return null;
+  const firstLink = findTerminalFileLinks(firstText).reverse().find((link) => link.end === firstText.length && !hasCommonFileExtension(link.path));
+  if (!firstLink) return null;
+
+  const secondText = secondLine.translateToString(true);
+  const leadingSpaces = secondText.length - secondText.trimStart().length;
+  const secondTrimmed = secondText.slice(leadingSpaces);
+  const secondLink = findTerminalFileLinks(secondTrimmed).find((link) => link.start === 0);
+  if (!secondLink) return null;
+
+  const path = firstLink.path + secondLink.path;
+  if (!hasCommonFileExtension(path)) return null;
+  const [startY, startX] = mapStringIndex(terminal, firstLineIndex, 0, firstLink.start);
+  const [endY, endX] = mapStringIndex(terminal, secondLineIndex, 0, leadingSpaces + secondLink.end);
+  if (startY < 0 || startX < 0 || endY < 0 || endX < 0) return null;
+  return {
+    text: path,
+    range: {
+      start: { x: startX + 1, y: startY + 1 },
+      end: { x: endX, y: endY + 1 },
+    },
+    decorations: { pointerCursor: true, underline: true },
+    activate: () => onPath(path),
+  };
+}
+
 export function createTerminalFileLinkProvider(terminal: Terminal, onPath: (path: string) => void): ILinkProvider {
   return {
     provideLinks(bufferLineNumber, callback) {
@@ -76,7 +113,7 @@ export function createTerminalFileLinkProvider(terminal: Terminal, onPath: (path
         callback(undefined);
         return;
       }
-      const links: ILink[] = findTerminalFileLinks(text).flatMap((link) => {
+      const ordinaryLinks: ILink[] = findTerminalFileLinks(text).flatMap((link) => {
         const [startY, startX] = mapStringIndex(terminal, startLineIndex, 0, link.start);
         const [endY, endX] = mapStringIndex(terminal, startLineIndex, 0, link.end);
         if (startY < 0 || startX < 0 || endY < 0 || endX < 0) return [];
@@ -91,6 +128,15 @@ export function createTerminalFileLinkProvider(terminal: Terminal, onPath: (path
           activate: () => onPath(link.path),
         }];
       });
+      const lineIndex = bufferLineNumber - 1;
+      const hardLinks = [
+        hardWrappedFileLink(terminal, lineIndex - 1, lineIndex, onPath),
+        hardWrappedFileLink(terminal, lineIndex, lineIndex + 1, onPath),
+      ].filter((link): link is ILink => link !== null);
+      const links = [
+        ...hardLinks,
+        ...ordinaryLinks.filter((ordinary) => !hardLinks.some((hard) => hard.text.startsWith(ordinary.text) || hard.text.endsWith(ordinary.text))),
+      ];
       callback(links.length ? links : undefined);
     },
   };
