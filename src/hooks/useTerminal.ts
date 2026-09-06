@@ -4,6 +4,7 @@ import { authFetch } from '../api/client';
 import { PtyConnection } from '../api/websocket';
 import { getCache, evictOldest } from '../components/terminal/TerminalCache';
 import type { CachedTerminal } from '../components/terminal/TerminalCache';
+import { followTerminalTail, isTerminalAtBottom } from '../components/terminal/terminalViewport';
 import { getTerminalFontSize } from '../components/MobileSettingsPanel';
 
 const TERMINAL_OPTIONS = {
@@ -41,25 +42,10 @@ const TERMINAL_OPTIONS = {
   allowProposedApi: true,
 };
 
-function isNearBottom(term: any) {
-  try {
-    const buffer = term.buffer.active;
-    return buffer.baseY - buffer.viewportY <= 1;
-  } catch {
-    return true;
-  }
-}
-
 function scrollToBottomIfNeeded(term: any, shouldStick: boolean) {
-  if (!shouldStick) return;
   try {
-    term.scrollToBottom();
+    followTerminalTail(term, shouldStick);
   } catch {}
-}
-
-function shouldStickToBottom(cached: CachedTerminal | null, stickyUntil: number) {
-  if (!cached) return Date.now() < stickyUntil;
-  return cached.stickyToBottom || Date.now() < stickyUntil;
 }
 
 function stripTerminalRecoveryNoise(data: string) {
@@ -105,7 +91,6 @@ export function useTerminal(
   const resizeObserver = useRef<ResizeObserver | null>(null);
   const lastSize = useRef({ rows: 0, cols: 0 });
   const didSetup = useRef(false);
-  const stickyBottomUntil = useRef(0);
   const resizeFrame = useRef<number | null>(null);
   const resizeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -131,7 +116,7 @@ export function useTerminal(
         wrapper.appendChild(cached.container);
       }
       cached.container.style.display = 'block';
-      const stickToBottom = shouldStickToBottom(cached, stickyBottomUntil.current);
+      const stickToBottom = cached.stickyToBottom;
       cached.fitAddon.fit();
       scrollToBottomIfNeeded(cached.term, stickToBottom);
       cached.term.focus();
@@ -165,21 +150,27 @@ export function useTerminal(
     term.open(container);
 
     const connection = new PtyConnection(agentId, ptyId);
+    let cached: CachedTerminal;
 
     connection.setOnData((data) => {
       const filtered = stripTerminalRecoveryNoise(data).replace(/\x7f/g, '');
       if (!filtered) return;
 
-      const stickToBottom = shouldStickToBottom(activeCached.current, stickyBottomUntil.current);
       term.write(filtered, () => {
-        scrollToBottomIfNeeded(term, stickToBottom);
+        // Read the state when xterm has actually consumed this chunk. A user
+        // may scroll up while writes are queued; a snapshot taken at arrival
+        // would throw them back down after their gesture completed.
+        scrollToBottomIfNeeded(term, cached.stickyToBottom);
       });
     });
 
     connection.setOnClear(() => {
-      const stickToBottom = shouldStickToBottom(activeCached.current, stickyBottomUntil.current);
+      const stickToBottom = cached.stickyToBottom;
       term.clear();
       term.reset();
+      // reset() may emit a scroll event for its temporary empty buffer. That
+      // event is not a user returning to the tail, so keep the prior policy.
+      cached.stickyToBottom = stickToBottom;
       scrollToBottomIfNeeded(term, stickToBottom);
     });
 
@@ -207,18 +198,14 @@ export function useTerminal(
         .replace(/\x1b\[>[\d;]*c/g, '')
         .replace(/\x1b\]\d+;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
       if (filtered) {
-        const stickToBottom = shouldStickToBottom(activeCached.current, stickyBottomUntil.current);
-        if (stickToBottom) {
-          stickyBottomUntil.current = Date.now() + (/(?:\r|\n)/.test(filtered) ? 1200 : 300);
-        }
         connection.sendInput(filtered);
         requestAnimationFrame(() => {
-          scrollToBottomIfNeeded(term, shouldStickToBottom(activeCached.current, stickyBottomUntil.current));
+          scrollToBottomIfNeeded(term, cached.stickyToBottom);
         });
       }
     });
 
-    const cached: CachedTerminal = {
+    cached = {
       term,
       fitAddon,
       container,
@@ -233,17 +220,14 @@ export function useTerminal(
     activeCached.current = cached;
 
     term.onScroll(() => {
-      cached.stickyToBottom = isNearBottom(term);
-      if (cached.stickyToBottom) {
-        stickyBottomUntil.current = 0;
-      }
+      cached.stickyToBottom = isTerminalAtBottom(term);
     });
 
     requestAnimationFrame(() => {
       fitAddon.fit();
       connection.attach(term.rows, term.cols, true);
       term.focus();
-      scrollToBottomIfNeeded(term, shouldStickToBottom(cached, stickyBottomUntil.current));
+      scrollToBottomIfNeeded(term, cached.stickyToBottom);
       lastSize.current = { rows: term.rows, cols: term.cols };
     });
   }, [agentId, session.id, needsFullscreenRedraw, wrapperRef, setError]);
@@ -252,7 +236,7 @@ export function useTerminal(
     const cached = activeCached.current;
     if (!cached) return;
 
-    const stickToBottom = shouldStickToBottom(cached, stickyBottomUntil.current);
+    const stickToBottom = cached.stickyToBottom;
     cached.fitAddon.fit();
     scrollToBottomIfNeeded(cached.term, stickToBottom);
 
@@ -274,7 +258,7 @@ export function useTerminal(
       resizeFrame.current = null;
       const cached = activeCached.current;
       if (!cached) return;
-      const stickToBottom = shouldStickToBottom(cached, stickyBottomUntil.current);
+      const stickToBottom = cached.stickyToBottom;
       cached.fitAddon.fit();
       scrollToBottomIfNeeded(cached.term, stickToBottom);
     });
