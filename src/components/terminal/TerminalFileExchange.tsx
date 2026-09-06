@@ -8,12 +8,14 @@ import {
   attachmentPrompt,
   childPath,
   isPreviewableImage,
+  isPreviewableText,
   resolveTerminalFilePath,
   safeUploadName,
 } from './terminalFiles';
 
 const MAX_ATTACHMENTS = 10;
 const MAX_PREVIEW_BYTES = 32 * 1024 * 1024;
+const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 
 interface LocalAttachment {
   id: number;
@@ -25,9 +27,11 @@ interface RemoteFileState {
   path: string;
   entry?: FsEntry;
   previewUrl?: string;
+  textPreview?: string;
   loading: boolean;
   busy: boolean;
   previewTooLarge: boolean;
+  previewLimit?: number;
   error?: string;
 }
 
@@ -99,14 +103,23 @@ export default function TerminalFileExchange({
       const entry = result.files.find((item) => !item.is_dir && (item.path === result.path || item.path === path));
       if (!entry) throw new Error('The selected path is not a file');
       const previewable = isPreviewableImage(entry.name);
-      const previewTooLarge = previewable && entry.size > MAX_PREVIEW_BYTES;
-      setRemote({ path: entry.path, entry, loading: previewable && !previewTooLarge, busy: false, previewTooLarge });
-      if (previewable && !previewTooLarge) {
+      const textPreviewable = isPreviewableText(entry.name);
+      const previewLimit = previewable ? MAX_PREVIEW_BYTES : textPreviewable ? MAX_TEXT_PREVIEW_BYTES : undefined;
+      const previewTooLarge = previewLimit !== undefined && entry.size > previewLimit;
+      const shouldLoadPreview = previewLimit !== undefined && !previewTooLarge;
+      setRemote({ path: entry.path, entry, loading: shouldLoadPreview, busy: false, previewTooLarge, previewLimit });
+      if (shouldLoadPreview) {
         const blob = await fetchFileBlob(agentId, entry.path);
         if (requestId !== remoteRequestId.current) return;
-        const previewUrl = URL.createObjectURL(blob);
-        remotePreviewUrl.current = previewUrl;
-        setRemote({ path: entry.path, entry, previewUrl, loading: false, busy: false, previewTooLarge: false });
+        if (previewable) {
+          const previewUrl = URL.createObjectURL(blob);
+          remotePreviewUrl.current = previewUrl;
+          setRemote({ path: entry.path, entry, previewUrl, loading: false, busy: false, previewTooLarge: false, previewLimit });
+        } else {
+          const textPreview = await blob.text();
+          if (requestId !== remoteRequestId.current) return;
+          setRemote({ path: entry.path, entry, textPreview, loading: false, busy: false, previewTooLarge: false, previewLimit });
+        }
       }
     } catch (error) {
       if (requestId === remoteRequestId.current) {
@@ -262,9 +275,10 @@ export default function TerminalFileExchange({
       >
         <div className="break-all font-mono text-xs text-canvas-muted">{remote?.path}</div>
         {(remote?.loading || remote?.busy) && <div className="mt-4 flex items-center gap-2 text-xs text-canvas-muted"><span className="h-3 w-3 animate-spin rounded-full border-2 border-canvas-border border-t-canvas-accent" />{remote.loading ? 'Loading preview…' : 'Preparing file…'}</div>}
-        {remote?.previewTooLarge && <div className="mt-4 text-xs text-canvas-muted">Preview is limited to {formatSize(MAX_PREVIEW_BYTES)}. You can still save or share the file.</div>}
+        {remote?.previewTooLarge && <div className="mt-4 text-xs text-canvas-muted">Preview is limited to {formatSize(remote.previewLimit || MAX_PREVIEW_BYTES)} for this file type. You can still save or share the file.</div>}
         {remote?.previewUrl && <img src={remote.previewUrl} alt={remote.entry?.name || ''} className="mt-4 max-h-[65vh] w-full rounded-xl border border-canvas-border bg-black object-contain" />}
-        {remote?.entry && !remote.previewUrl && !remote.loading && !remote.previewTooLarge && <div className="mt-6 flex flex-col items-center gap-2 py-8 text-canvas-muted"><FileIcon size={42} /><span className="text-xs">Preview is not available for this file type</span></div>}
+        {remote?.textPreview !== undefined && <pre className="mt-4 max-h-[65vh] overflow-auto whitespace-pre rounded-xl border border-canvas-border bg-canvas-bg p-3 font-mono text-xs font-normal leading-5 text-canvas-text selection:bg-canvas-accent/30">{remote.textPreview}</pre>}
+        {remote?.entry && !remote.previewUrl && remote.textPreview === undefined && !remote.loading && !remote.previewTooLarge && <div className="mt-6 flex flex-col items-center gap-2 py-8 text-canvas-muted"><FileIcon size={42} /><span className="text-xs">Preview is not available for this file type</span></div>}
         {remote?.error && <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{remote.error}</div>}
       </DialogShell>
     </>

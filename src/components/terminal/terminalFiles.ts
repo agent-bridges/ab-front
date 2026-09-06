@@ -10,6 +10,21 @@ const PREVIEWABLE_IMAGE_EXTENSIONS = new Set([
   'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg', 'heic', 'heif', 'avif',
 ]);
 
+const PREVIEWABLE_TEXT_EXTENSIONS = new Set([
+  'txt', 'md', 'log', 'csv', 'tsv', 'json', 'jsonl', 'yaml', 'yml', 'toml', 'xml',
+  'ini', 'conf', 'cfg', 'env', 'properties', 'lock', 'diff', 'patch',
+  'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+  'py', 'pyi', 'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'css', 'scss', 'sass', 'less',
+  'html', 'htm', 'vue', 'svelte', 'kt', 'kts', 'java', 'go', 'rs', 'rb', 'php',
+  'c', 'h', 'cc', 'cpp', 'cxx', 'hpp', 'cs', 'swift', 'scala', 'sql', 'graphql',
+  'proto', 'gradle', 'cmake', 'make', 'dockerfile', 'gitignore', 'gitattributes',
+]);
+
+const PREVIEWABLE_TEXT_NAMES = new Set([
+  'dockerfile', 'makefile', 'rakefile', 'gemfile', 'procfile', 'license', 'readme',
+  '.env', '.gitignore', '.gitattributes', '.dockerignore',
+]);
+
 const LEADING_PUNCTUATION = new Set(['(', '[', '{', ':']);
 const TRAILING_PUNCTUATION = new Set([')', ']', '}', '.', ',', ';', ':', '!', '?']);
 
@@ -147,6 +162,13 @@ export function attachmentPrompt(prompt: string, paths: string[]): string {
 export function isPreviewableImage(name: string): boolean {
   const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
   return PREVIEWABLE_IMAGE_EXTENSIONS.has(extension);
+}
+
+export function isPreviewableText(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (PREVIEWABLE_TEXT_NAMES.has(lower)) return true;
+  const extension = lower.includes('.') ? lower.slice(lower.lastIndexOf('.') + 1) : '';
+  return PREVIEWABLE_TEXT_EXTENSIONS.has(extension);
 }
 
 export function childPath(directory: string, name: string): string {

@@ -3,6 +3,7 @@ import {
   attachmentPrompt,
   filePathAt,
   findTerminalFileLinks,
+  isPreviewableText,
   normalizePosixPath,
   resolveTerminalFilePath,
   safeUploadName,
@@ -28,6 +29,13 @@ describe('terminal file links', () => {
   it('unescapes shell spaces and strips source line suffixes', () => {
     const line = '/apps/demo/final\\ image.ts:18:4';
     expect(filePathAt(line, 4)?.path).toBe('/apps/demo/final image.ts');
+  });
+
+  it('recognises source, configuration and extensionless project files as text', () => {
+    expect(isPreviewableText('worker.py')).toBe(true);
+    expect(isPreviewableText('config.toml')).toBe(true);
+    expect(isPreviewableText('Dockerfile')).toBe(true);
+    expect(isPreviewableText('archive.zip')).toBe(false);
   });
 });
 
