@@ -17,6 +17,7 @@ const TERMINAL_OPTIONS = {
   lineHeight: 1.2,
   scrollback: 10000,
   scrollSensitivity: 3,
+  scrollOnUserInput: true,
   theme: {
     background: '#06060a',
     foreground: '#e4e4ef',
@@ -159,12 +160,11 @@ export function useTerminal(
       const filtered = stripTerminalRecoveryNoise(data).replace(/\x7f/g, '');
       if (!filtered) return;
 
-      term.write(filtered, () => {
-        // Read the state when xterm has actually consumed this chunk. A user
-        // may scroll up while writes are queued; a snapshot taken at arrival
-        // would throw them back down after their gesture completed.
-        scrollToBottomIfNeeded(term, cached.stickyToBottom);
-      });
+      // xterm already follows new output while its viewport is at the tail and
+      // preserves the viewport while the user is reading scrollback. Calling
+      // scrollToBottom from the write callback races with wheel/scrollbar
+      // input on desktop and can drag the user back to the live output.
+      term.write(filtered);
     });
 
     connection.setOnClear(() => {
