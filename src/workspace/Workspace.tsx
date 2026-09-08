@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownUp, Cable, ChevronDown, ChevronRight, Columns2, FolderOpen, Keyboard, Link2,
   Eye, EyeOff, LayoutGrid, Menu, Pencil, Plus, StickyNote, Terminal as TerminalIcon,
-  Trash2, Wrench, X,
+  RotateCw, Trash2, Wrench, X,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useKeyboardStore } from '../stores/keyboardStore';
@@ -33,6 +33,22 @@ import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowO
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
+
+/** Check the installed PWA worker first, then reload the whole application. */
+export async function reloadWholeApp() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      await registration?.update();
+    }
+  } catch (error) {
+    // A blocked/offline update check must not turn the reload button into a
+    // no-op. The navigation below still reloads the currently installed app.
+    console.warn('PWA update check failed', error);
+  } finally {
+    window.location.reload();
+  }
+}
 
 export const DESKTOP_TREE_DEPTH_CLASSES = {
   relayRow: 'px-2',
@@ -311,6 +327,7 @@ export default function Workspace() {
       <span className="flex-1" />
       <button disabled={tabs.filter((id) => entryMap.has(id)).length < 2} className="rounded p-1.5 hover:bg-canvas-border disabled:opacity-30" onClick={() => createGroup(tabs.filter((id) => entryMap.has(id)))} title="Group open tabs"><Columns2 size={15} /></button>
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setKeyboardVisible(!keyboardVisible)} title="Touch keyboard"><Keyboard size={15} /></button>
+      <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => void reloadWholeApp()} title="Reload app" aria-label="Reload app"><RotateCw size={15} /></button>
       <button className="rounded p-1.5 hover:bg-canvas-border" onClick={() => setSettingsOpen(true)} title="Settings"><Wrench size={15} /></button>
     </header>
     <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} workspaceError={workspaceError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities(), loadItems(currentAgentId)])} />
