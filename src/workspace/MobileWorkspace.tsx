@@ -34,7 +34,7 @@ import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { daemonDisplayName, sessionDisplayName } from '../stores/clientAliasStore';
 import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
 import { collectFavouriteSessions, useFavouritesStore, type FavouriteSession } from '../stores/favouritesStore';
-import { FavouritesPanel, LayoutsPanel } from './WorkspaceCollections';
+import { FavouritesPanel } from './WorkspaceCollections';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -139,8 +139,6 @@ export default function MobileWorkspace() {
   const openTabIds = useWorkspaceStore((state) => state.openTabIds);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const closeTab = useWorkspaceStore((state) => state.closeTab);
-  const groups = useWorkspaceStore((state) => state.groups);
-  const deleteGroup = useWorkspaceStore((state) => state.deleteGroup);
   const addBoardItem = useWorkspaceStore((state) => state.addBoardItem);
   const updateBoardItem = useWorkspaceStore((state) => state.updateBoardItem);
   const removeBoardItem = useWorkspaceStore((state) => state.removeBoardItem);
@@ -155,7 +153,7 @@ export default function MobileWorkspace() {
   const setFavourite = useFavouritesStore((state) => state.setFavourite);
 
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [collection, setCollection] = useState<'layouts' | 'fav' | null>(null);
+  const [collection, setCollection] = useState<'fav' | null>(null);
   const [pendingFavourite, setPendingFavourite] = useState<{ agentId: string; sessionId: string } | null>(null);
   const [columns, setColumns] = useState(loadColumns);
   const [order, setOrder] = useState<string[]>([]);
@@ -305,11 +303,6 @@ export default function MobileWorkspace() {
     setCollection(null);
     setCurrentAgent(item.agent.id);
   };
-  const openLayout = (group: (typeof groups)[number]) => {
-    const members = group.members.flatMap((key) => { const entry = entryMap.get(key); return entry ? [entry] : []; });
-    members.forEach((entry) => openTab(entry.key));
-    if (members[0]) activate(members[0]);
-  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas-bg text-canvas-text" data-mobile-workspace>
@@ -360,8 +353,7 @@ export default function MobileWorkspace() {
         <span className="min-w-0 flex-1" />
         <button onClick={() => setMenuOpen((value) => !value)} className="shrink-0 rounded p-1.5 hover:bg-canvas-border" title="Menu">{menuOpen ? <X size={18} className="text-canvas-muted" /> : <Menu size={18} className="text-canvas-muted" />}</button>
         {menuOpen && <><button className="fixed inset-0 z-[60]" onClick={() => setMenuOpen(false)} aria-label="Close menu" /><div className="absolute left-0 right-0 top-10 z-[61] border-b border-canvas-border bg-canvas-surface p-2 shadow-lg">
-          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Workspace</div><div className="grid grid-cols-2 gap-1 px-2">
-            <button onClick={() => { setCollection('layouts'); setActiveKey(null); setMenuOpen(false); }} className={`flex items-center gap-2 rounded px-3 py-2 text-xs ${collection === 'layouts' ? 'bg-canvas-accent/15 text-canvas-accent' : 'hover:bg-canvas-border'}`}><LayoutGrid size={16} />Layouts</button>
+          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Workspace</div><div className="px-2">
             <button onClick={() => { setCollection('fav'); setActiveKey(null); setMenuOpen(false); }} className={`flex items-center gap-2 rounded px-3 py-2 text-xs ${collection === 'fav' ? 'bg-canvas-accent/15 text-canvas-accent' : 'hover:bg-canvas-border'}`}><Star size={16} className={collection === 'fav' ? 'fill-current' : ''} />Fav{favourites.length > 0 && <span className="ml-auto rounded bg-canvas-border px-1 text-[9px]">{favourites.length}</span>}</button>
           </div><div className="my-1 h-px bg-canvas-border" />
           {canCreate && <><div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Create</div><div className="flex gap-1 px-2">{[
@@ -377,7 +369,7 @@ export default function MobileWorkspace() {
       <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} workspaceError={workspaceError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities(), loadItems(currentAgentId)])} />
 
       <main className="relative min-h-0 flex-1">
-        {collection === 'layouts' ? <div className="absolute inset-0" style={{ bottom: TAB_HEIGHT }}><LayoutsPanel groups={groups} entryMap={entryMap} onOpen={openLayout} onDelete={(group) => deleteGroup(group.id)} /></div> : collection === 'fav' ? <div className="absolute inset-0" style={{ bottom: TAB_HEIGHT }}><FavouritesPanel favourites={favourites} loading={favouritesLoading} failedAgents={favouriteFailedAgents} onOpen={openFavourite} onRemove={(item) => void setFavourite(item.agent.id, item.session, false).catch(console.error)} /></div> : !activeEntry ? <div className="h-full overflow-y-auto p-3" style={{ paddingBottom: TAB_HEIGHT + 12 }} data-mobile-canvas>
+        {collection === 'fav' ? <div className="absolute inset-0" style={{ bottom: TAB_HEIGHT }}><FavouritesPanel favourites={favourites} loading={favouritesLoading} failedAgents={favouriteFailedAgents} onOpen={openFavourite} onRemove={(item) => void setFavourite(item.agent.id, item.session, false).catch(console.error)} /></div> : !activeEntry ? <div className="h-full overflow-y-auto p-3" style={{ paddingBottom: TAB_HEIGHT + 12 }} data-mobile-canvas>
           <div ref={gridRef} className="grid justify-center gap-[6px]" style={{ gridTemplateColumns: `repeat(${columns}, 72px)`, touchAction: dragMode ? 'none' : undefined }}>
             {orderedEntries.map((entry) => <button key={entry.key} data-mobile-entry={entry.key} aria-label={mobileEntryDisplayTitle(entry)} title={mobileEntryDisplayTitle(entry)} onPointerDown={(event) => { if (dragMode) { event.preventDefault(); setDraggingKey(entry.key); } }} onClick={() => { if (dragMode) return; if (deleteMode) { setDeleteEntry(entry); return; } activate(entry); }} onContextMenu={(event) => { event.preventDefault(); if (!dragMode && !deleteMode) setContextEntry(entry); }} className={`relative flex h-[102px] w-[72px] select-none flex-col items-center justify-center rounded-xl ${activeKey === entry.key ? 'bg-canvas-accent/10' : 'bg-canvas-surface'} ${draggingKey === entry.key ? 'opacity-30' : ''} ${dragMode || deleteMode ? 'animate-[wiggle_0.3s_ease-in-out_infinite_alternate]' : 'active:opacity-70'}`}>
               {deleteMode && <span className="absolute -right-1 -top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500"><X size={10} className="text-white" /></span>}
