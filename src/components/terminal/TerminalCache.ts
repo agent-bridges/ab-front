@@ -10,6 +10,13 @@ export interface CachedTerminal {
   ptyId: string;
   lastUsed: number;
   stickyToBottom: boolean;
+  scrollbackTotalChunks: number;
+  scrollbackReturnedChunks: number;
+  scrollbackLoading: boolean;
+  scrollbackWritePending: boolean;
+  scrollbackInfoReceived: boolean;
+  restoreDistanceFromBottom: number | null;
+  forceBottomAfterReplay: boolean;
   onFilePath?: (path: string) => void;
 }
 

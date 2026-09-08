@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { followTerminalTail, isTerminalAtBottom, type TerminalViewportLike } from './terminalViewport';
+import {
+  followTerminalTail,
+  isTerminalAtBottom,
+  nextScrollbackLimit,
+  restoredViewportLine,
+  type TerminalViewportLike,
+} from './terminalViewport';
 
 function terminal(baseY: number, viewportY: number) {
   return {
@@ -24,5 +30,17 @@ describe('terminal viewport follow policy', () => {
     const term = terminal(120, 120);
     followTerminalTail(term, true);
     expect(term.scrollToBottom).toHaveBeenCalledOnce();
+  });
+
+  it('loads older scrollback in bounded growing windows', () => {
+    expect(nextScrollbackLimit(0, 4_000)).toBe(512);
+    expect(nextScrollbackLimit(512, 4_000)).toBe(1_024);
+    expect(nextScrollbackLimit(3_000, 4_000)).toBe(4_000);
+    expect(nextScrollbackLimit(4_000, 4_000)).toBeNull();
+  });
+
+  it('restores the viewed content after older rows are prepended', () => {
+    expect(restoredViewportLine(1_500, 900)).toBe(600);
+    expect(restoredViewportLine(500, 900)).toBe(0);
   });
 });

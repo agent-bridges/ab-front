@@ -92,6 +92,25 @@ afterEach(() => {
 });
 
 describe('PtyConnection lifecycle', () => {
+  it('requests a bounded initial tail and can grow it on demand', () => {
+    const onScrollbackInfo = vi.fn();
+    const connection = new PtyConnection('7', 'pty-1');
+    connection.setOnScrollbackInfo(onScrollbackInfo);
+    connection.attach(24, 80, false, 512);
+    const ws = socket();
+    ready(ws);
+
+    expect(sentMessages(ws)[0]).toMatchObject({
+      action: 'attach', request_scrollback: false, scrollback_limit: 512,
+    });
+
+    connection.requestMoreScrollback(1024);
+    expect(sentMessages(ws)[1]).toEqual({ type: 'scrollback', limit: 1024 });
+    ws.message({ type: 'scrollback_info', total_chunks: 4000, returned_chunks: 1024 });
+    expect(onScrollbackInfo).toHaveBeenCalledWith({ totalChunks: 4000, returnedChunks: 1024 });
+    connection.destroy();
+  });
+
   it('does not carry an intentional-close flag into a replacement attach', () => {
     const connection = new PtyConnection('7', 'pty-1');
     connection.attach(24, 80, true);

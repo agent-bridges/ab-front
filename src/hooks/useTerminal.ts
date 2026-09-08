@@ -4,7 +4,12 @@ import { authFetch } from '../api/client';
 import { PtyConnection } from '../api/websocket';
 import { getCache, evictOldest } from '../components/terminal/TerminalCache';
 import type { CachedTerminal } from '../components/terminal/TerminalCache';
-import { followTerminalTail, isTerminalAtBottom } from '../components/terminal/terminalViewport';
+import {
+  followTerminalTail,
+  isTerminalAtBottom,
+  nextScrollbackLimit,
+  restoredViewportLine,
+} from '../components/terminal/terminalViewport';
 import { getTerminalFontSize } from '../components/MobileSettingsPanel';
 import { createTerminalFileLinkProvider } from '../components/terminal/terminalFileLinkProvider';
 
@@ -43,6 +48,8 @@ const TERMINAL_OPTIONS = {
   },
   allowProposedApi: true,
 };
+
+const INITIAL_SCROLLBACK_CHUNKS = 512;
 
 function scrollToBottomIfNeeded(term: any, shouldStick: boolean) {
   try {
@@ -126,7 +133,7 @@ export function useTerminal(
       cached.term.focus();
 
       if (cached.connection.status !== 'connected') {
-        cached.connection.attach(cached.term.rows, cached.term.cols, true);
+        cached.connection.attach(cached.term.rows, cached.term.cols, false, cached.scrollbackReturnedChunks || INITIAL_SCROLLBACK_CHUNKS);
       }
       return;
     }
@@ -160,14 +167,44 @@ export function useTerminal(
       const filtered = stripTerminalRecoveryNoise(data).replace(/\x7f/g, '');
       if (!filtered) return;
 
+      const forceBottom = cached.forceBottomAfterReplay;
+      const restoreDistance = cached.restoreDistanceFromBottom;
+      const replayWrite = cached.scrollbackLoading && (forceBottom || restoreDistance !== null);
+      if (replayWrite) cached.scrollbackWritePending = true;
+      cached.forceBottomAfterReplay = false;
+      cached.restoreDistanceFromBottom = null;
+
       // xterm already follows new output while its viewport is at the tail and
       // preserves the viewport while the user is reading scrollback. Calling
       // scrollToBottom from the write callback races with wheel/scrollbar
       // input on desktop and can drag the user back to the live output.
-      term.write(filtered);
+      if (forceBottom || restoreDistance !== null) {
+        term.write(filtered, () => {
+          if (forceBottom) {
+            term.scrollToBottom();
+            cached.stickyToBottom = true;
+          } else if (restoreDistance !== null) {
+            term.scrollToLine(restoredViewportLine(term.buffer.active.baseY, restoreDistance));
+            cached.stickyToBottom = isTerminalAtBottom(term);
+          }
+          if (replayWrite) {
+            cached.scrollbackWritePending = false;
+            if (cached.scrollbackInfoReceived) cached.scrollbackLoading = false;
+          }
+        });
+      } else {
+        term.write(filtered);
+      }
     });
 
     connection.setOnClear(() => {
+      if (!cached.scrollbackLoading) {
+        cached.scrollbackLoading = true;
+        cached.scrollbackInfoReceived = false;
+        cached.scrollbackWritePending = false;
+        if (cached.stickyToBottom) cached.forceBottomAfterReplay = true;
+        else cached.restoreDistanceFromBottom = term.buffer.active.baseY - term.buffer.active.viewportY;
+      }
       const stickToBottom = cached.stickyToBottom;
       term.clear();
       term.reset();
@@ -175,6 +212,18 @@ export function useTerminal(
       // event is not a user returning to the tail, so keep the prior policy.
       cached.stickyToBottom = stickToBottom;
       scrollToBottomIfNeeded(term, stickToBottom);
+    });
+
+    connection.setOnScrollbackInfo(({ totalChunks, returnedChunks }) => {
+      cached.scrollbackTotalChunks = totalChunks;
+      cached.scrollbackReturnedChunks = returnedChunks;
+      cached.scrollbackInfoReceived = true;
+      if (!cached.scrollbackWritePending) cached.scrollbackLoading = false;
+      if (returnedChunks === 0 && cached.forceBottomAfterReplay) {
+        cached.forceBottomAfterReplay = false;
+        term.scrollToBottom();
+        cached.stickyToBottom = true;
+      }
     });
 
     connection.setOnSessionEnded(() => {
@@ -216,6 +265,13 @@ export function useTerminal(
       ptyId,
       lastUsed: Date.now(),
       stickyToBottom: true,
+      scrollbackTotalChunks: 0,
+      scrollbackReturnedChunks: 0,
+      scrollbackLoading: true,
+      scrollbackWritePending: false,
+      scrollbackInfoReceived: false,
+      restoreDistanceFromBottom: null,
+      forceBottomAfterReplay: true,
     };
 
     cache.set(ptyId, cached);
@@ -226,11 +282,19 @@ export function useTerminal(
 
     term.onScroll(() => {
       cached.stickyToBottom = isTerminalAtBottom(term);
+      if (term.buffer.active.viewportY !== 0 || cached.scrollbackLoading) return;
+      const limit = nextScrollbackLimit(cached.scrollbackReturnedChunks, cached.scrollbackTotalChunks, INITIAL_SCROLLBACK_CHUNKS);
+      if (limit === null) return;
+      cached.scrollbackLoading = true;
+      cached.scrollbackInfoReceived = false;
+      cached.scrollbackWritePending = false;
+      cached.restoreDistanceFromBottom = term.buffer.active.baseY - term.buffer.active.viewportY;
+      connection.requestMoreScrollback(limit);
     });
 
     requestAnimationFrame(() => {
       fitAddon.fit();
-      connection.attach(term.rows, term.cols, true);
+      connection.attach(term.rows, term.cols, false, INITIAL_SCROLLBACK_CHUNKS);
       term.focus();
       scrollToBottomIfNeeded(term, cached.stickyToBottom);
       lastSize.current = { rows: term.rows, cols: term.cols };

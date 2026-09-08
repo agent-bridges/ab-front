@@ -10,6 +10,7 @@ type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 type OnDataCallback = (data: string) => void;
 type OnReadyCallback = (info: { session_id: string; name: string; project_path: string }) => void;
 type OnStatusCallback = (status: ConnectionStatus) => void;
+type OnScrollbackInfoCallback = (info: { totalChunks: number; returnedChunks: number }) => void;
 const READY_TIMEOUT_MS = 12000;
 const BACKGROUND_REPLACE_AFTER_MS = 2000;
 
@@ -29,6 +30,7 @@ export class PtyConnection {
   private rows = 40;
   private cols = 120;
   private requestScrollback = false;
+  private scrollbackLimit: number | null = null;
   private readyTimedOutWhileHidden = false;
   private socketStartedAt = 0;
   private lastForegroundRecoveryAt = Number.NEGATIVE_INFINITY;
@@ -41,6 +43,7 @@ export class PtyConnection {
   private onData: OnDataCallback | null = null;
   private onReady: OnReadyCallback | null = null;
   private onStatus: OnStatusCallback | null = null;
+  private onScrollbackInfo: OnScrollbackInfoCallback | null = null;
   private onClear: (() => void) | null = null;
   private onSessionEnded: (() => void) | null = null;
 
@@ -53,6 +56,7 @@ export class PtyConnection {
   setOnData(cb: OnDataCallback) { this.onData = cb; }
   setOnReady(cb: OnReadyCallback) { this.onReady = cb; }
   setOnStatus(cb: OnStatusCallback) { this.onStatus = cb; }
+  setOnScrollbackInfo(cb: OnScrollbackInfoCallback) { this.onScrollbackInfo = cb; }
   setOnClear(cb: () => void) { this.onClear = cb; }
   setOnSessionEnded(cb: () => void) { this.onSessionEnded = cb; }
 
@@ -61,12 +65,13 @@ export class PtyConnection {
     this.onStatus?.(s);
   }
 
-  attach(rows = 40, cols = 120, requestScrollback = false) {
+  attach(rows = 40, cols = 120, requestScrollback = false, scrollbackLimit: number | null = null) {
     if (this.destroyed) return;
     this.desired = true;
     this.rows = rows;
     this.cols = cols;
     this.requestScrollback = requestScrollback;
+    this.scrollbackLimit = scrollbackLimit;
     this.retryAttempt = 0;
     this.openSocket(false);
   }
@@ -97,13 +102,15 @@ export class PtyConnection {
 
     ws.onopen = () => {
       if (!isCurrent()) return;
-      ws.send(JSON.stringify({
+      const attachRequest: Record<string, unknown> = {
         action: 'attach',
         pty_id: this.ptyId,
         rows: this.rows,
         cols: this.cols,
         request_scrollback: recovering || this.requestScrollback,
-      }));
+      };
+      if (this.scrollbackLimit !== null) attachRequest.scrollback_limit = this.scrollbackLimit;
+      ws.send(JSON.stringify(attachRequest));
     };
 
     this.readyTimer = setTimeout(() => {
@@ -141,7 +148,13 @@ export class PtyConnection {
       } else if (msg.type === 'output') {
         this.onData?.(msg.data);
       } else if (msg.type === 'clear') {
+        recoveryNeedsClear = false;
         this.onClear?.();
+      } else if (msg.type === 'scrollback_info') {
+        this.onScrollbackInfo?.({
+          totalChunks: Number(msg.total_chunks) || 0,
+          returnedChunks: Number(msg.returned_chunks) || 0,
+        });
       } else if (msg.type === 'session_ended') {
         this.stopCurrentSocket(ws);
         this.onSessionEnded?.();
@@ -195,6 +208,15 @@ export class PtyConnection {
     // can be dangerous in a different prompt. The next keystroke after ready
     // is delivered normally.
     this.recoverNow();
+  }
+
+  requestMoreScrollback(limit: number) {
+    this.scrollbackLimit = Math.max(0, Math.floor(limit));
+    if (this.status === 'connected' && this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'scrollback', limit: this.scrollbackLimit }));
+    } else if (this.desired) {
+      this.recoverNow();
+    }
   }
 
   sendResize(rows: number, cols: number) {

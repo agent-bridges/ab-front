@@ -23,6 +23,13 @@ describe('forceRefresh', () => {
       container: {} as never,
       lastUsed: 0,
       stickyToBottom: true,
+      scrollbackTotalChunks: 0,
+      scrollbackReturnedChunks: 0,
+      scrollbackLoading: false,
+      scrollbackWritePending: false,
+      scrollbackInfoReceived: false,
+      restoreDistanceFromBottom: null,
+      forceBottomAfterReplay: false,
     });
 
     forceRefresh('pty-1');
