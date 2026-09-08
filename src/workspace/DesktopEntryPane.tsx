@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Mic, MicOff, Minus, Pencil, RotateCw, Trash2, X } from 'lucide-react';
+import { Eye, Mic, MicOff, Minus, Pencil, RotateCw, Star, Trash2, X } from 'lucide-react';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
 import DialogShell from '../components/dialogs/DialogShell';
@@ -14,6 +14,7 @@ import ClaudeIcon from '../components/icons/ClaudeIcon';
 import CodexIcon from '../components/icons/CodexIcon';
 import { Cable, FolderOpen, StickyNote, Terminal as TerminalIcon } from 'lucide-react';
 import { sessionDisplayName } from '../stores/clientAliasStore';
+import { useFavouritesStore } from '../stores/favouritesStore';
 
 export type WorkspaceEntry =
   | { key: string; kind: 'session'; agentId: string; session: PtySession }
@@ -42,7 +43,7 @@ export function WorkspaceEntryIcon({ entry, size = 13 }: { entry: WorkspaceEntry
   );
 }
 
-export const DESKTOP_TERMINAL_PANE_ACTIONS = ['voice', 'refresh', 'hide', 'delete'] as const;
+export const DESKTOP_TERMINAL_PANE_ACTIONS = ['favourite', 'voice', 'refresh', 'hide', 'delete'] as const;
 
 interface SpeechRecognitionResultLike {
   isFinal: boolean;
@@ -252,6 +253,9 @@ export default function DesktopEntryPane({
   onDelete: () => void;
 }) {
   const title = workspaceEntryDisplayTitle(entry);
+  const favouriteSession = useFavouritesStore((state) => entry.kind === 'session' ? state.sessionsByAgent[entry.agentId]?.[entry.session.id] : undefined);
+  const setFavourite = useFavouritesStore((state) => state.setFavourite);
+  const favourite = entry.kind === 'session' && favouriteSession?.meta?.fav === true;
   // Board preferences historically used the raw canvas/board item id. Keep
   // that key stable instead of changing it to the Workspace `board:` key.
   const preferenceId = entry.kind === 'board' ? entry.item.id : entry.key;
@@ -266,6 +270,17 @@ export default function DesktopEntryPane({
         </span>
         {entry.kind === 'session' && (
           <>
+            <button
+              className={`rounded p-1 hover:bg-canvas-border ${favourite ? 'text-yellow-400' : 'text-canvas-muted hover:text-yellow-400'}`}
+              onClick={(event) => { event.stopPropagation(); void setFavourite(entry.agentId, entry.session, !favourite).catch(console.error); }}
+              onPointerDown={(event) => event.stopPropagation()}
+              title={favourite ? 'Remove from Fav' : 'Add to Fav'}
+              aria-label={`${favourite ? 'Remove' : 'Add'} ${entry.session.name} ${favourite ? 'from' : 'to'} Fav`}
+              aria-pressed={favourite}
+              data-pane-action="favourite"
+            >
+              <Star size={11} className={favourite ? 'fill-current' : ''} />
+            </button>
             <DesktopVoiceInput agentId={entry.agentId} session={entry.session} />
             <button
               className="rounded p-1 text-canvas-muted hover:bg-canvas-border hover:text-canvas-accent"

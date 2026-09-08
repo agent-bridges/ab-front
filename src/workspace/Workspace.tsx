@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownUp, Cable, ChevronDown, ChevronRight, Columns2, FolderOpen, Keyboard, Link2,
   Eye, EyeOff, LayoutGrid, Menu, Pencil, Plus, StickyNote, Terminal as TerminalIcon,
-  RotateCw, Trash2, Wrench, X,
+  RotateCw, Star, Trash2, Wrench, X,
 } from 'lucide-react';
 import { useAgentStore } from '../stores/agentStore';
 import { useKeyboardStore } from '../stores/keyboardStore';
@@ -30,6 +30,8 @@ import ClientAliasDialog from '../components/ClientAliasDialog';
 import { daemonDisplayName } from '../stores/clientAliasStore';
 import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
+import { collectFavouriteSessions, useFavouritesStore, type FavouriteSession } from '../stores/favouritesStore';
+import { FAV_PANE_ID, FavouritesPanel, LAYOUTS_PANE_ID, LayoutsPanel } from './WorkspaceCollections';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -168,6 +170,7 @@ export default function Workspace() {
   const setSidebarWidth = useWorkspaceStore((state) => state.setSidebarWidth);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const closeTab = useWorkspaceStore((state) => state.closeTab);
+  const focusTab = useWorkspaceStore((state) => state.focusTab);
   const addBoardItem = useWorkspaceStore((state) => state.addBoardItem);
   const updateBoardItem = useWorkspaceStore((state) => state.updateBoardItem);
   const removeBoardItem = useWorkspaceStore((state) => state.removeBoardItem);
@@ -178,6 +181,12 @@ export default function Workspace() {
   const setGroupLayout = useWorkspaceStore((state) => state.setGroupLayout);
   const keyboardVisible = useKeyboardStore((state) => state.keyboard.visible);
   const setKeyboardVisible = useKeyboardStore((state) => state.setKeyboardVisible);
+  const favouriteSessionsByAgent = useFavouritesStore((state) => state.sessionsByAgent);
+  const favouriteLoadingAgents = useFavouritesStore((state) => state.loadingAgents);
+  const favouriteErrorsByAgent = useFavouritesStore((state) => state.errorsByAgent);
+  const refreshFavouriteAgent = useFavouritesStore((state) => state.refreshAgent);
+  const refreshFavouriteAgents = useFavouritesStore((state) => state.refreshAgents);
+  const setFavourite = useFavouritesStore((state) => state.setFavourite);
 
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -188,6 +197,7 @@ export default function Workspace() {
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
   const [showOffline, setShowOffline] = useShowOfflineMachines();
+  const [pendingFavourite, setPendingFavourite] = useState<{ agentId: string; sessionId: string } | null>(null);
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const autoOpenedAgentsRef = useRef<Set<string>>(new Set());
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(() => {
@@ -220,10 +230,36 @@ export default function Workspace() {
   const tabs = openTabIds.filter((id) => entryMap.has(id) || groupMap.has(id));
   const focusedEntry = focusedItemId ? entryMap.get(focusedItemId) : undefined;
   const focusedGroup = focusedItemId ? groupMap.get(focusedItemId) : undefined;
+  const favourites = useMemo(() => collectFavouriteSessions(agents, favouriteSessionsByAgent).map((item) => {
+    if (item.agent.id !== currentAgentId) return item;
+    const live = sessionsById[item.session.id];
+    return live ? { ...item, session: { ...item.session, ...live, meta: item.session.meta } } : item;
+  }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
+  const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
+  const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
+
+  useEffect(() => {
+    if (currentAgentId) void refreshFavouriteAgent(currentAgentId);
+  }, [currentAgentId, refreshFavouriteAgent]);
+
+  useEffect(() => {
+    if (focusedItemId !== FAV_PANE_ID) return;
+    void refreshFavouriteAgents(agents);
+    const timer = window.setInterval(() => void refreshFavouriteAgents(agents), 15_000);
+    return () => window.clearInterval(timer);
+  }, [agents, focusedItemId, refreshFavouriteAgents]);
+
+  useEffect(() => {
+    if (!pendingFavourite || currentAgentId !== pendingFavourite.agentId) return;
+    const key = sessionKey(pendingFavourite.sessionId);
+    if (!entryMap.has(key)) return;
+    openTab(key);
+    setPendingFavourite(null);
+  }, [currentAgentId, entryMap, openTab, pendingFavourite]);
 
   useEffect(() => {
     if (!currentAgentId) return;
-    const focusedPaneIsValid = Boolean(focusedItemId && (entryMap.has(focusedItemId) || groupMap.has(focusedItemId)));
+    const focusedPaneIsValid = Boolean(focusedItemId && (entryMap.has(focusedItemId) || groupMap.has(focusedItemId) || focusedItemId === LAYOUTS_PANE_ID || focusedItemId === FAV_PANE_ID));
     // Pick a useful initial pane once per agent. After the user explicitly
     // hides the final tab, keep the workspace empty even after A -> B -> A.
     const first = entries[0];
@@ -245,6 +281,14 @@ export default function Workspace() {
     if (deleteEntry.kind === 'session') await killPty(deleteEntry.agentId, deleteEntry.session.id);
     else await removeBoardItem(deleteEntry.item.id);
     setDeleteEntry(null);
+  };
+  const openFavourite = (item: FavouriteSession) => {
+    if (item.agent.id === currentAgentId && entryMap.has(sessionKey(item.session.id))) {
+      openTab(sessionKey(item.session.id));
+      return;
+    }
+    setPendingFavourite({ agentId: item.agent.id, sessionId: item.session.id });
+    setCurrentAgent(item.agent.id);
   };
 
   const sidebar = (
@@ -293,7 +337,7 @@ export default function Workspace() {
                   <EntryIcon entry={entry} />
                   {editingKey === entry.key && entry.kind === 'board' ? <RenameInput value={entry.item.label} onCancel={() => setEditingKey(null)} onSave={(name) => updateBoardItem(entry.item.id, { label: name })} /> : <span className="min-w-0 flex-1 truncate">{workspaceEntryDisplayTitle(entry)}</span>}
                 </button>
-                {editingKey !== entry.key && <><button className="hidden rounded p-0.5 group-hover:block" onClick={() => entry.kind === 'session' ? setAliasTarget({ kind: 'session', entry }) : setEditingKey(entry.key)}><Pencil size={10} /></button><button className="hidden rounded p-0.5 text-red-400 group-hover:block" onClick={() => setDeleteEntry(entry)}><Trash2 size={10} /></button></>}
+                {editingKey !== entry.key && <>{entry.kind === 'session' && (() => { const fav = favouriteSessionsByAgent[entry.agentId]?.[entry.session.id]?.meta?.fav === true; return <button className={`rounded p-0.5 ${fav ? 'text-yellow-400' : 'hidden text-canvas-muted group-hover:block hover:text-yellow-400'}`} onClick={() => void setFavourite(entry.agentId, entry.session, !fav).catch(console.error)} title={fav ? 'Remove from Fav' : 'Add to Fav'} aria-label={`${fav ? 'Remove' : 'Add'} ${workspaceEntryDisplayTitle(entry)} ${fav ? 'from' : 'to'} Fav`} aria-pressed={fav}><Star size={10} className={fav ? 'fill-current' : ''} /></button>; })()}<button className="hidden rounded p-0.5 group-hover:block" onClick={() => entry.kind === 'session' ? setAliasTarget({ kind: 'session', entry }) : setEditingKey(entry.key)}><Pencil size={10} /></button><button className="hidden rounded p-0.5 text-red-400 group-hover:block" onClick={() => setDeleteEntry(entry)}><Trash2 size={10} /></button></>}
               </div>)}
               {visibleEntries.length === 0 && <div className="px-3 py-2 text-[11px] text-canvas-muted">No matching entries</div>}
             </div>}
@@ -336,6 +380,8 @@ export default function Workspace() {
       {isMobile && sidebarOpen && <button className="fixed inset-0 top-10 z-40 bg-black/50" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar" />}
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-9 shrink-0 overflow-x-auto border-b border-canvas-border bg-canvas-surface">
+          <button onClick={() => focusTab(LAYOUTS_PANE_ID)} className={`flex min-w-24 items-center gap-2 border-r border-canvas-border px-3 text-xs ${focusedItemId === LAYOUTS_PANE_ID ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}><LayoutGrid size={13} /><span>Layouts</span></button>
+          <button onClick={() => focusTab(FAV_PANE_ID)} className={`flex min-w-20 items-center gap-2 border-r border-canvas-border px-3 text-xs ${focusedItemId === FAV_PANE_ID ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}><Star size={13} className={focusedItemId === FAV_PANE_ID ? 'fill-current' : ''} /><span>Fav</span>{favourites.length > 0 && <span className="rounded bg-canvas-border px-1 text-[9px]">{favourites.length}</span>}</button>
           {tabs.map((id) => {
             const entry = entryMap.get(id); const group = groupMap.get(id); const title = entry ? workspaceEntryDisplayTitle(entry) : group?.name || id;
             return <button key={id} onClick={() => openTab(id)} className={`group flex min-w-28 max-w-52 items-center gap-2 border-r border-canvas-border px-2 text-xs ${focusedItemId === id ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}>
@@ -344,7 +390,7 @@ export default function Workspace() {
           })}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          {focusedEntry ? <DesktopEntryPane entry={focusedEntry} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
+          {focusedItemId === LAYOUTS_PANE_ID ? <LayoutsPanel groups={groups} entryMap={entryMap} onOpen={(group) => openTab(group.id)} onDelete={(group) => deleteGroup(group.id)} /> : focusedItemId === FAV_PANE_ID ? <FavouritesPanel favourites={favourites} loading={favouritesLoading} failedAgents={favouriteFailedAgents} onOpen={openFavourite} onRemove={(item) => void setFavourite(item.agent.id, item.session, false).catch(console.error)} /> : focusedEntry ? <DesktopEntryPane entry={focusedEntry} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
             <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-2">
               <input value={focusedGroup.name} onChange={(event) => renameGroup(focusedGroup.id, event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs outline-none" />
               <select value={focusedGroup.layout} onChange={(event) => setGroupLayout(focusedGroup.id, event.target.value as IdeGroupLayout)} className="rounded border border-canvas-border bg-canvas-bg px-1 text-xs"><option value="v2">Columns</option><option value="h2">Rows</option><option value="grid">Grid</option></select>

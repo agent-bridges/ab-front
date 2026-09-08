@@ -69,6 +69,11 @@ export interface PtySession {
   claude_session_id?: string;
   processes?: ProcessInfo[];
   ai_status?: string;
+  /** REST-only daemon metadata. The live websocket row is overlaid with it client-side. */
+  meta?: {
+    fav?: boolean;
+    [key: string]: unknown;
+  } | null;
 }
 
 export interface Agent {

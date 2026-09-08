@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Cable, Eye, EyeOff, FolderOpen, GripVertical, Keyboard, LayoutGrid, Lock, LogOut, Menu,
-  Link2, Minus, Pencil, Plus, RotateCw, StickyNote, Terminal as TerminalIcon,
+  Link2, Minus, Pencil, Plus, RotateCw, Star, StickyNote, Terminal as TerminalIcon,
   Trash2, User, Wrench, X,
 } from 'lucide-react';
 import { logout as logoutRequest } from '../api/auth';
@@ -33,6 +33,8 @@ import type { Agent } from '../types';
 import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { daemonDisplayName, sessionDisplayName } from '../stores/clientAliasStore';
 import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
+import { collectFavouriteSessions, useFavouritesStore, type FavouriteSession } from '../stores/favouritesStore';
+import { FavouritesPanel, LayoutsPanel } from './WorkspaceCollections';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -137,14 +139,24 @@ export default function MobileWorkspace() {
   const openTabIds = useWorkspaceStore((state) => state.openTabIds);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const closeTab = useWorkspaceStore((state) => state.closeTab);
+  const groups = useWorkspaceStore((state) => state.groups);
+  const deleteGroup = useWorkspaceStore((state) => state.deleteGroup);
   const addBoardItem = useWorkspaceStore((state) => state.addBoardItem);
   const updateBoardItem = useWorkspaceStore((state) => state.updateBoardItem);
   const removeBoardItem = useWorkspaceStore((state) => state.removeBoardItem);
   const keyboardVisible = useKeyboardStore((state) => state.keyboard.visible);
   const setKeyboardVisible = useKeyboardStore((state) => state.setKeyboardVisible);
   const authLogout = useAuthStore((state) => state.logout);
+  const favouriteSessionsByAgent = useFavouritesStore((state) => state.sessionsByAgent);
+  const favouriteLoadingAgents = useFavouritesStore((state) => state.loadingAgents);
+  const favouriteErrorsByAgent = useFavouritesStore((state) => state.errorsByAgent);
+  const refreshFavouriteAgent = useFavouritesStore((state) => state.refreshAgent);
+  const refreshFavouriteAgents = useFavouritesStore((state) => state.refreshAgents);
+  const setFavourite = useFavouritesStore((state) => state.setFavourite);
 
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [collection, setCollection] = useState<'layouts' | 'fav' | null>(null);
+  const [pendingFavourite, setPendingFavourite] = useState<{ agentId: string; sessionId: string } | null>(null);
   const [columns, setColumns] = useState(loadColumns);
   const [order, setOrder] = useState<string[]>([]);
   const [dragMode, setDragMode] = useState(false);
@@ -179,9 +191,25 @@ export default function MobileWorkspace() {
   const orderedEntries = useMemo(() => order.flatMap((key) => { const entry = entryMap.get(key); return entry ? [entry] : []; }), [entryMap, order]);
   const tabs = openTabIds.flatMap((key) => { const entry = entryMap.get(key); return entry ? [entry] : []; });
   const activeEntry = activeKey ? entryMap.get(activeKey) : undefined;
+  const favourites = useMemo(() => collectFavouriteSessions(agents, favouriteSessionsByAgent).map((item) => {
+    if (item.agent.id !== currentAgentId) return item;
+    const live = sessionsById[item.session.id];
+    return live ? { ...item, session: { ...item.session, ...live, meta: item.session.meta } } : item;
+  }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
+  const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
+  const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
 
   useEffect(() => { setOrder((previous) => reconcileMobileOrder(previous, entries.map((entry) => entry.key))); }, [entries]);
   useEffect(() => { setActiveKey(null); }, [currentAgentId]);
+  useEffect(() => {
+    if (currentAgentId) void refreshFavouriteAgent(currentAgentId);
+  }, [currentAgentId, refreshFavouriteAgent]);
+  useEffect(() => {
+    if (collection !== 'fav') return;
+    void refreshFavouriteAgents(agents);
+    const timer = window.setInterval(() => void refreshFavouriteAgents(agents), 15_000);
+    return () => window.clearInterval(timer);
+  }, [agents, collection, refreshFavouriteAgents]);
   useEffect(() => {
     if (activeKey && !entryMap.has(activeKey)) setActiveKey(null);
   }, [activeKey, entryMap]);
@@ -197,7 +225,16 @@ export default function MobileWorkspace() {
   const activate = useCallback((entry: MobileEntry) => {
     openTab(entry.key);
     setActiveKey(entry.key);
+    setCollection(null);
   }, [openTab]);
+
+  useEffect(() => {
+    if (!pendingFavourite || currentAgentId !== pendingFavourite.agentId) return;
+    const entry = entryMap.get(sessionKey(pendingFavourite.sessionId));
+    if (!entry) return;
+    activate(entry);
+    setPendingFavourite(null);
+  }, [activate, currentAgentId, entryMap, pendingFavourite]);
 
   const createEntry = async (type: 'terminal' | BoardItemType) => {
     if (!currentAgentId) return;
@@ -261,6 +298,18 @@ export default function MobileWorkspace() {
       : type === 'notes'
         ? capabilities.canvas
         : capabilities.tunnels;
+  const openFavourite = (item: FavouriteSession) => {
+    const entry = item.agent.id === currentAgentId ? entryMap.get(sessionKey(item.session.id)) : undefined;
+    if (entry) { activate(entry); return; }
+    setPendingFavourite({ agentId: item.agent.id, sessionId: item.session.id });
+    setCollection(null);
+    setCurrentAgent(item.agent.id);
+  };
+  const openLayout = (group: (typeof groups)[number]) => {
+    const members = group.members.flatMap((key) => { const entry = entryMap.get(key); return entry ? [entry] : []; });
+    members.forEach((entry) => openTab(entry.key));
+    if (members[0]) activate(members[0]);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas-bg text-canvas-text" data-mobile-workspace>
@@ -311,6 +360,10 @@ export default function MobileWorkspace() {
         <span className="min-w-0 flex-1" />
         <button onClick={() => setMenuOpen((value) => !value)} className="shrink-0 rounded p-1.5 hover:bg-canvas-border" title="Menu">{menuOpen ? <X size={18} className="text-canvas-muted" /> : <Menu size={18} className="text-canvas-muted" />}</button>
         {menuOpen && <><button className="fixed inset-0 z-[60]" onClick={() => setMenuOpen(false)} aria-label="Close menu" /><div className="absolute left-0 right-0 top-10 z-[61] border-b border-canvas-border bg-canvas-surface p-2 shadow-lg">
+          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Workspace</div><div className="grid grid-cols-2 gap-1 px-2">
+            <button onClick={() => { setCollection('layouts'); setActiveKey(null); setMenuOpen(false); }} className={`flex items-center gap-2 rounded px-3 py-2 text-xs ${collection === 'layouts' ? 'bg-canvas-accent/15 text-canvas-accent' : 'hover:bg-canvas-border'}`}><LayoutGrid size={16} />Layouts</button>
+            <button onClick={() => { setCollection('fav'); setActiveKey(null); setMenuOpen(false); }} className={`flex items-center gap-2 rounded px-3 py-2 text-xs ${collection === 'fav' ? 'bg-canvas-accent/15 text-canvas-accent' : 'hover:bg-canvas-border'}`}><Star size={16} className={collection === 'fav' ? 'fill-current' : ''} />Fav{favourites.length > 0 && <span className="ml-auto rounded bg-canvas-border px-1 text-[9px]">{favourites.length}</span>}</button>
+          </div><div className="my-1 h-px bg-canvas-border" />
           {canCreate && <><div className="px-2 py-1 text-[10px] uppercase tracking-wider text-canvas-muted">Create</div><div className="flex gap-1 px-2">{[
             ['terminal', TerminalIcon, 'New terminal'], ['filebrowser', FolderOpen, 'Files'], ['notes', StickyNote, 'Note'], ['tunnels', Cable, 'Tunnels'],
           ].filter(([type]) => supportsCreateType(String(type))).map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex h-10 w-10 items-center justify-center rounded hover:bg-canvas-border" title={String(label)}><Icon size={18} className="text-canvas-accent" /></button>)}</div></>}
@@ -324,22 +377,23 @@ export default function MobileWorkspace() {
       <DiscoveryErrorBanner relayError={relayError} capabilitiesError={capabilitiesError} workspaceError={workspaceError} onRetry={() => void Promise.all([loadRelays(currentAgentId), loadCapabilities(), loadItems(currentAgentId)])} />
 
       <main className="relative min-h-0 flex-1">
-        {!activeEntry ? <div className="h-full overflow-y-auto p-3" style={{ paddingBottom: TAB_HEIGHT + 12 }} data-mobile-canvas>
+        {collection === 'layouts' ? <div className="absolute inset-0" style={{ bottom: TAB_HEIGHT }}><LayoutsPanel groups={groups} entryMap={entryMap} onOpen={openLayout} onDelete={(group) => deleteGroup(group.id)} /></div> : collection === 'fav' ? <div className="absolute inset-0" style={{ bottom: TAB_HEIGHT }}><FavouritesPanel favourites={favourites} loading={favouritesLoading} failedAgents={favouriteFailedAgents} onOpen={openFavourite} onRemove={(item) => void setFavourite(item.agent.id, item.session, false).catch(console.error)} /></div> : !activeEntry ? <div className="h-full overflow-y-auto p-3" style={{ paddingBottom: TAB_HEIGHT + 12 }} data-mobile-canvas>
           <div ref={gridRef} className="grid justify-center gap-[6px]" style={{ gridTemplateColumns: `repeat(${columns}, 72px)`, touchAction: dragMode ? 'none' : undefined }}>
             {orderedEntries.map((entry) => <button key={entry.key} data-mobile-entry={entry.key} aria-label={mobileEntryDisplayTitle(entry)} title={mobileEntryDisplayTitle(entry)} onPointerDown={(event) => { if (dragMode) { event.preventDefault(); setDraggingKey(entry.key); } }} onClick={() => { if (dragMode) return; if (deleteMode) { setDeleteEntry(entry); return; } activate(entry); }} onContextMenu={(event) => { event.preventDefault(); if (!dragMode && !deleteMode) setContextEntry(entry); }} className={`relative flex h-[102px] w-[72px] select-none flex-col items-center justify-center rounded-xl ${activeKey === entry.key ? 'bg-canvas-accent/10' : 'bg-canvas-surface'} ${draggingKey === entry.key ? 'opacity-30' : ''} ${dragMode || deleteMode ? 'animate-[wiggle_0.3s_ease-in-out_infinite_alternate]' : 'active:opacity-70'}`}>
               {deleteMode && <span className="absolute -right-1 -top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-red-500"><X size={10} className="text-white" /></span>}
+              {entry.kind === 'session' && favouriteSessionsByAgent[entry.agentId]?.[entry.session.id]?.meta?.fav === true && <Star size={12} className="absolute right-1 top-1 fill-yellow-400 text-yellow-400" />}
               <EntryIcon entry={entry} /><span className="mt-1 min-h-6 max-w-16 overflow-hidden text-center text-[10px] font-semibold leading-3" style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: MOBILE_TILE_LABEL_LINES }}>{mobileEntryDisplayTitle(entry)}</span>
             </button>)}
             {canCreate && <button onClick={() => setCreateOpen(true)} className="flex h-[102px] w-[72px] items-center justify-center rounded-xl border border-dashed border-canvas-border active:opacity-70" title="Create"><Plus size={20} className="text-canvas-muted" /></button>}
           </div>
         </div> : <section key={`${activeEntry.key}-${refreshKey}`} className="absolute inset-0 flex min-h-0 flex-col bg-canvas-bg" style={{ bottom: TAB_HEIGHT }}>
-          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryDisplayTitle(activeEntry)}</span><button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
+          <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-3"><EntryIcon entry={activeEntry} size={12} /><span className="min-w-0 flex-1 truncate text-xs">{mobileEntryDisplayTitle(activeEntry)}</span>{activeEntry.kind === 'session' && (() => { const fav = favouriteSessionsByAgent[activeEntry.agentId]?.[activeEntry.session.id]?.meta?.fav === true; return <button onClick={() => void setFavourite(activeEntry.agentId, activeEntry.session, !fav).catch(console.error)} className={`rounded p-1 hover:bg-canvas-border ${fav ? 'text-yellow-400' : 'text-canvas-muted'}`} title={fav ? 'Remove from Fav' : 'Add to Fav'} aria-pressed={fav}><Star size={13} className={fav ? 'fill-current' : ''} /></button>; })()}<button onClick={() => setRefreshKey((value) => value + 1)} className="rounded p-1 hover:bg-canvas-border" title="Refresh"><RotateCw size={13} className="text-canvas-muted" /></button><button onClick={() => setActiveKey(null)} className="rounded p-1 hover:bg-canvas-border" title="Canvas"><Minus size={14} className="text-canvas-muted" /></button></div>
           <div className="min-h-0 flex-1"><EntryBody entry={activeEntry} /></div>
         </section>}
 
         <nav className="absolute bottom-0 left-0 right-0 z-50 flex overflow-x-auto border-t border-canvas-border bg-canvas-surface" style={{ height: TAB_HEIGHT }} aria-label="Open workspace tabs">
-          <button onClick={() => setActiveKey(null)} className={`flex h-full items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${!activeKey ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><LayoutGrid size={12} />Canvas</button>
-          {tabs.map((entry) => <button key={entry.key} onClick={() => setActiveKey(entry.key)} className={`flex h-full min-w-0 items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${activeKey === entry.key ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><span className="truncate">{entry.kind === 'session' ? <TerminalIcon size={12} className="inline" /> : entry.item.type === 'notes' ? <StickyNote size={12} className="inline" /> : entry.item.type === 'filebrowser' ? <FolderOpen size={12} className="inline" /> : <Cable size={12} className="inline" />} {mobileEntryDisplayTitle(entry)}</span><span onClick={(event) => { event.stopPropagation(); closeTab(entry.key); if (activeKey === entry.key) setActiveKey(null); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={10} /></span></button>)}
+          <button onClick={() => { setActiveKey(null); setCollection(null); }} className={`flex h-full items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${!activeKey && !collection ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><LayoutGrid size={12} />Canvas</button>
+          {tabs.map((entry) => <button key={entry.key} onClick={() => { setCollection(null); setActiveKey(entry.key); }} className={`flex h-full min-w-0 items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${activeKey === entry.key && !collection ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><span className="truncate">{entry.kind === 'session' ? <TerminalIcon size={12} className="inline" /> : entry.item.type === 'notes' ? <StickyNote size={12} className="inline" /> : entry.item.type === 'filebrowser' ? <FolderOpen size={12} className="inline" /> : <Cable size={12} className="inline" />} {mobileEntryDisplayTitle(entry)}</span><span onClick={(event) => { event.stopPropagation(); closeTab(entry.key); if (activeKey === entry.key) setActiveKey(null); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={10} /></span></button>)}
         </nav>
       </main>
 
@@ -347,7 +401,7 @@ export default function MobileWorkspace() {
         ['terminal', TerminalIcon, 'Terminal'], ['filebrowser', FolderOpen, 'Files'], ['notes', StickyNote, 'Note'], ['tunnels', Cable, 'Tunnels'],
       ].filter(([type]) => supportsCreateType(String(type))).map(([type, Icon, label]) => <button key={String(type)} onClick={() => void createEntry(type as 'terminal' | BoardItemType)} className="flex flex-col items-center gap-2 rounded-xl p-3 hover:bg-canvas-border"><Icon size={28} className="text-canvas-accent" /><span className="text-[11px]">{String(label)}</span></button>)}</div></div></>}
 
-      {contextEntry && <><button className="fixed inset-0 z-[80]" onClick={() => setContextEntry(null)} aria-label="Close item menu" /><div className="fixed bottom-12 left-3 right-3 z-[81] rounded-xl border border-canvas-border bg-canvas-surface p-1 shadow-xl"><button onClick={() => { if (contextEntry.kind === 'session') setAliasTarget({ kind: 'session', entry: contextEntry }); else { setRenamingEntry(contextEntry); setRenameValue(contextEntry.item.label); } setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs hover:bg-canvas-border"><Pencil size={14} />Rename</button><button onClick={() => { setDeleteEntry(contextEntry); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={14} />Delete</button></div></>}
+      {contextEntry && <><button className="fixed inset-0 z-[80]" onClick={() => setContextEntry(null)} aria-label="Close item menu" /><div className="fixed bottom-12 left-3 right-3 z-[81] rounded-xl border border-canvas-border bg-canvas-surface p-1 shadow-xl">{contextEntry.kind === 'session' && (() => { const fav = favouriteSessionsByAgent[contextEntry.agentId]?.[contextEntry.session.id]?.meta?.fav === true; return <button onClick={() => { void setFavourite(contextEntry.agentId, contextEntry.session, !fav).catch(console.error); setContextEntry(null); }} className={`flex w-full items-center gap-2 rounded px-3 py-3 text-xs hover:bg-canvas-border ${fav ? 'text-yellow-400' : ''}`}><Star size={14} className={fav ? 'fill-current' : ''} />{fav ? 'Remove from Fav' : 'Add to Fav'}</button>; })()}<button onClick={() => { if (contextEntry.kind === 'session') setAliasTarget({ kind: 'session', entry: contextEntry }); else { setRenamingEntry(contextEntry); setRenameValue(contextEntry.item.label); } setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs hover:bg-canvas-border"><Pencil size={14} />Rename</button><button onClick={() => { setDeleteEntry(contextEntry); setContextEntry(null); }} className="flex w-full items-center gap-2 rounded px-3 py-3 text-xs text-red-400 hover:bg-red-500/10"><Trash2 size={14} />Delete</button></div></>}
       {renamingEntry && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-4"><div className="w-full max-w-xs rounded-xl border border-canvas-border bg-canvas-surface p-4"><div className="mb-3 text-sm font-semibold">Rename</div><input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void commitRename(); if (event.key === 'Escape') setRenamingEntry(null); }} className="w-full rounded border border-canvas-border bg-canvas-bg px-3 py-2 text-xs outline-none focus:border-canvas-accent" /><div className="mt-3 flex justify-end gap-2"><button onClick={() => setRenamingEntry(null)} className="rounded border border-canvas-border px-3 py-1.5 text-xs">Cancel</button><button onClick={() => void commitRename()} className="rounded border border-canvas-accent bg-canvas-accent/20 px-3 py-1.5 text-xs text-canvas-accent">Save</button></div></div></div>}
 
       <ClientAliasDialog

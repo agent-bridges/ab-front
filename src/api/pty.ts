@@ -1,5 +1,6 @@
 import { authFetch } from './client';
 import { readJson, readJsonOrThrow } from './http';
+import type { PtySession } from '../types';
 
 interface CreatePtyOptions {
   agentId: string;
@@ -59,6 +60,21 @@ export async function setPtyLabel(agentId: string, sessionId: string, label: str
     body: JSON.stringify({ label }),
   });
   return readJsonOrThrow(res, 'Failed to change PTY label');
+}
+
+/** REST is intentionally used here: session metadata is not part of pty-state websocket rows. */
+export async function listPtySessions(agentId: string): Promise<PtySession[]> {
+  const res = await authFetch(`/api/agents/${encodeURIComponent(agentId)}/pty`);
+  return readJsonOrThrow<PtySession[]>(res, 'Failed to load PTY metadata');
+}
+
+export async function setPtyFavourite(agentId: string, sessionId: string, fav: boolean) {
+  const res = await authFetch(`/api/agents/${encodeURIComponent(agentId)}/pty/${encodeURIComponent(sessionId)}/meta`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ meta: { fav } }),
+  });
+  return readJsonOrThrow<{ ok: boolean; meta: Record<string, unknown> }>(res, 'Failed to update favourite');
 }
 
 export async function sendPtyText(agentId: string, sessionId: string, text: string, enter = true) {
