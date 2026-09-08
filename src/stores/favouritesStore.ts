@@ -10,6 +10,8 @@ interface FavouritesState {
   errorsByAgent: Record<string, string>;
   refreshAgent: (agentId: string) => Promise<void>;
   refreshAgents: (agents: Agent[]) => Promise<void>;
+  mergeLiveAgent: (agentId: string, sessions: PtySession[]) => void;
+  clearLiveAgent: (agentId: string) => void;
   setFavourite: (agentId: string, session: PtySession, fav: boolean) => Promise<void>;
 }
 
@@ -25,6 +27,19 @@ export function collectFavouriteSessions(agents: Agent[], sessionsByAgent: Sessi
     .sort((a, b) => (b.session.created_at || '').localeCompare(a.session.created_at || ''));
 }
 
+export function mergeFavouriteMetadata(
+  sessions: PtySession[],
+  previous: Record<string, PtySession> = {},
+): Record<string, PtySession> {
+  return Object.fromEntries(sessions.map((session) => {
+    const cached = previous[session.id];
+    const live = cached?.processes === undefined
+      ? {}
+      : { processes: cached.processes, ai_status: cached.ai_status };
+    return [session.id, { ...cached, ...session, ...live, meta: session.meta }];
+  }));
+}
+
 export const useFavouritesStore = create<FavouritesState>((set, get) => ({
   sessionsByAgent: {},
   loadingAgents: {},
@@ -37,7 +52,10 @@ export const useFavouritesStore = create<FavouritesState>((set, get) => ({
     try {
       const sessions = await listPtySessions(agentId);
       set((state) => ({
-        sessionsByAgent: { ...state.sessionsByAgent, [agentId]: Object.fromEntries(sessions.map((session) => [session.id, session])) },
+        sessionsByAgent: {
+          ...state.sessionsByAgent,
+          [agentId]: mergeFavouriteMetadata(sessions, state.sessionsByAgent[agentId]),
+        },
         loadingAgents: { ...state.loadingAgents, [agentId]: false },
       }));
     } catch (error) {
@@ -50,6 +68,31 @@ export const useFavouritesStore = create<FavouritesState>((set, get) => ({
   refreshAgents: async (agents) => {
     await Promise.allSettled(agents.filter((agent) => agent.online).map((agent) => get().refreshAgent(agent.id)));
   },
+  mergeLiveAgent: (agentId, sessions) => set((state) => {
+    const previous = state.sessionsByAgent[agentId] || {};
+    const next = { ...previous };
+    for (const session of sessions) {
+      next[session.id] = {
+        ...previous[session.id],
+        ...session,
+        meta: previous[session.id]?.meta,
+      };
+    }
+    return { sessionsByAgent: { ...state.sessionsByAgent, [agentId]: next } };
+  }),
+  clearLiveAgent: (agentId) => set((state) => {
+    const previous = state.sessionsByAgent[agentId];
+    if (!previous) return state;
+    return {
+      sessionsByAgent: {
+        ...state.sessionsByAgent,
+        [agentId]: Object.fromEntries(Object.entries(previous).map(([id, session]) => {
+          const { processes: _processes, ai_status: _aiStatus, ...rest } = session;
+          return [id, rest as PtySession];
+        })),
+      },
+    };
+  }),
   setFavourite: async (agentId, session, fav) => {
     const before = get().sessionsByAgent[agentId]?.[session.id];
     const optimistic = { ...(before || session), meta: { ...(before?.meta || session.meta || {}), fav } };

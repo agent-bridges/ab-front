@@ -35,6 +35,7 @@ import { daemonDisplayName, sessionDisplayName } from '../stores/clientAliasStor
 import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
 import { collectFavouriteSessions, useFavouritesStore, type FavouriteSession } from '../stores/favouritesStore';
 import { FavouritesPanel } from './WorkspaceCollections';
+import { useFavouriteLiveStatus } from '../hooks/useFavouriteLiveStatus';
 
 const DEFAULT_COLUMNS = 5;
 const COLUMNS_KEY = 'ab-mobile-icons-per-row';
@@ -196,6 +197,7 @@ export default function MobileWorkspace() {
   }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
   const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
   const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
+  useFavouriteLiveStatus(agents, collection === 'fav', currentAgentId);
 
   useEffect(() => { setOrder((previous) => reconcileMobileOrder(previous, entries.map((entry) => entry.key))); }, [entries]);
   useEffect(() => { setActiveKey(null); }, [currentAgentId]);

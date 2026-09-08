@@ -32,6 +32,7 @@ import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
 import { collectFavouriteSessions, useFavouritesStore, type FavouriteSession } from '../stores/favouritesStore';
 import { FavouritesPanel } from './WorkspaceCollections';
+import { useFavouriteLiveStatus } from '../hooks/useFavouriteLiveStatus';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -237,6 +238,7 @@ export default function Workspace() {
   }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
   const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
   const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
+  useFavouriteLiveStatus(agents, sidebarSection === 'fav', currentAgentId);
 
   useEffect(() => {
     if (currentAgentId) void refreshFavouriteAgent(currentAgentId);
