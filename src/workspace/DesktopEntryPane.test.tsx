@@ -26,7 +26,7 @@ describe('desktop entry pane toolbar', () => {
       <DesktopEntryPane entry={terminalEntry} active onHide={() => {}} onDelete={() => {}} />,
     );
 
-    expect(DESKTOP_TERMINAL_PANE_ACTIONS).toEqual(['refresh', 'hide', 'delete']);
+    expect(DESKTOP_TERMINAL_PANE_ACTIONS).toEqual(['voice', 'refresh', 'hide', 'delete']);
     for (const action of DESKTOP_TERMINAL_PANE_ACTIONS) {
       expect(markup).toContain(`data-pane-action="${action}"`);
     }

@@ -1,10 +1,13 @@
-import { Eye, Minus, Pencil, RotateCw, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Eye, Mic, MicOff, Minus, Pencil, RotateCw, Trash2, X } from 'lucide-react';
 import FileBrowserView from '../components/filebrowser/FileBrowserView';
 import NotesEditor from '../components/notes/NotesEditor';
+import DialogShell from '../components/dialogs/DialogShell';
 import { forceRefresh as forceTerminalRefresh } from '../components/terminal/TerminalCache';
 import TerminalView from '../components/terminal/TerminalView';
 import TunnelsView from '../components/tunnels/TunnelsView';
 import { useNoteViewMode } from '../hooks/useNoteViewMode';
+import { sendPtyText } from '../api/pty';
 import type { BoardItem, PtySession } from '../types';
 import { getTerminalStatusMeta, PROCESS_STATUS_THEME } from '../components/ProcessIndicator';
 import ClaudeIcon from '../components/icons/ClaudeIcon';
@@ -39,7 +42,201 @@ export function WorkspaceEntryIcon({ entry, size = 13 }: { entry: WorkspaceEntry
   );
 }
 
-export const DESKTOP_TERMINAL_PANE_ACTIONS = ['refresh', 'hide', 'delete'] as const;
+export const DESKTOP_TERMINAL_PANE_ACTIONS = ['voice', 'refresh', 'hide', 'delete'] as const;
+
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  [index: number]: { transcript: string };
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionErrorLike {
+  error: string;
+  message?: string;
+}
+
+interface BrowserSpeechRecognition {
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorLike) => void) | null;
+  onend: (() => void) | null;
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+function speechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
+  const browserWindow = window as typeof window & {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  };
+  return browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition || null;
+}
+
+function appendTranscript(current: string, addition: string): string {
+  const text = addition.trim();
+  if (!text) return current;
+  if (!current || /\s$/.test(current)) return `${current}${text}`;
+  return `${current} ${text}`;
+}
+
+function speechErrorMessage(error: string, detail?: string): string {
+  if (error === 'not-allowed' || error === 'service-not-allowed') return 'Microphone access was denied. Allow it for this site in Chrome settings and try again.';
+  if (error === 'audio-capture') return 'Chrome cannot access a microphone. Check the selected input device.';
+  if (error === 'network') return 'Chrome speech recognition could not reach its speech service.';
+  if (error === 'no-speech') return 'No speech was detected. You can start listening again.';
+  return detail || `Speech recognition failed: ${error}`;
+}
+
+function DesktopVoiceInput({ agentId, session }: { agentId: string; session: PtySession }) {
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [interim, setInterim] = useState('');
+  const [listening, setListening] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const stop = (abort = false) => {
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (recognition) abort ? recognition.abort() : recognition.stop();
+    setListening(false);
+  };
+
+  const start = () => {
+    if (recognitionRef.current) return;
+    const Recognition = speechRecognitionConstructor();
+    if (!Recognition) {
+      setError('Voice input is not supported by this browser. Open the installed app in desktop Chrome.');
+      return;
+    }
+
+    if (interim) {
+      setDraft((current) => appendTranscript(current, interim));
+      setInterim('');
+    }
+    setError('');
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.lang = navigator.language || 'en-US';
+    recognition.onstart = () => setListening(true);
+    recognition.onresult = (event) => {
+      let finalText = '';
+      let interimText = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const text = result[0]?.transcript || '';
+        if (result.isFinal) finalText = appendTranscript(finalText, text);
+        else interimText = appendTranscript(interimText, text);
+      }
+      if (finalText) setDraft((current) => appendTranscript(current, finalText));
+      setInterim(interimText);
+    };
+    recognition.onerror = (event) => {
+      setError(speechErrorMessage(event.error, event.message));
+      setListening(false);
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+      setListening(false);
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (reason) {
+      recognitionRef.current = null;
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const openAndStart = () => {
+    setOpen(true);
+    setDraft('');
+    setInterim('');
+    setError('');
+    start();
+  };
+
+  const close = () => {
+    stop(true);
+    setOpen(false);
+  };
+
+  const insert = async () => {
+    const text = appendTranscript(draft, interim).trim();
+    if (!text) return;
+    stop();
+    setBusy(true);
+    setError('');
+    try {
+      await sendPtyText(agentId, session.id, text, false);
+      setOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => () => recognitionRef.current?.abort(), []);
+
+  return <>
+    <button
+      className={`rounded p-1 hover:bg-canvas-border ${listening ? 'text-red-400' : 'text-canvas-muted hover:text-canvas-accent'}`}
+      onClick={(event) => { event.stopPropagation(); openAndStart(); }}
+      onPointerDown={(event) => event.stopPropagation()}
+      title="Voice input"
+      aria-label={`Voice input for ${session.name}`}
+      aria-pressed={listening}
+      data-pane-action="voice"
+    >
+      <Mic size={11} />
+    </button>
+    <DialogShell
+      open={open}
+      onClose={close}
+      title="Voice input"
+      description="Chrome converts speech to editable text. Insert does not press Enter."
+      widthClassName="max-w-xl"
+      footer={<>
+        <button className="rounded border border-canvas-border px-3 py-1.5 text-xs hover:bg-canvas-border" onClick={close}>Cancel</button>
+        <button disabled={busy || !appendTranscript(draft, interim).trim()} className="rounded bg-canvas-accent px-3 py-1.5 text-xs font-semibold text-canvas-bg disabled:opacity-40" onClick={() => void insert()}>{busy ? 'Inserting…' : 'Insert into terminal'}</button>
+      </>}
+    >
+      <div className="space-y-3">
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Recognised speech will appear here…"
+          className="h-36 w-full resize-y rounded-lg border border-canvas-border bg-canvas-bg p-3 text-sm text-canvas-text outline-none focus:border-canvas-accent"
+        />
+        {interim && <div className="rounded border border-canvas-border/70 bg-canvas-bg/60 px-3 py-2 text-xs text-canvas-muted">{interim}</div>}
+        {error && <div className="text-xs text-red-400">{error}</div>}
+        <button
+          className={`inline-flex items-center gap-2 rounded border px-3 py-2 text-xs ${listening ? 'border-red-400/60 text-red-400' : 'border-canvas-border text-canvas-text hover:bg-canvas-border'}`}
+          onClick={() => listening ? stop() : start()}
+        >
+          {listening ? <MicOff size={14} /> : <Mic size={14} />}
+          {listening ? 'Stop listening' : 'Start listening'}
+        </button>
+      </div>
+    </DialogShell>
+  </>;
+}
 
 export default function DesktopEntryPane({
   entry,
@@ -68,16 +265,19 @@ export default function DesktopEntryPane({
           {title}
         </span>
         {entry.kind === 'session' && (
-          <button
-            className="rounded p-1 text-canvas-muted hover:bg-canvas-border hover:text-canvas-accent"
-            onClick={(event) => { event.stopPropagation(); forceTerminalRefresh(entry.session.id); }}
-            onPointerDown={(event) => event.stopPropagation()}
-            title="Force redraw"
-            aria-label={`Refresh terminal ${entry.session.name}`}
-            data-pane-action="refresh"
-          >
-            <RotateCw size={11} />
-          </button>
+          <>
+            <DesktopVoiceInput agentId={entry.agentId} session={entry.session} />
+            <button
+              className="rounded p-1 text-canvas-muted hover:bg-canvas-border hover:text-canvas-accent"
+              onClick={(event) => { event.stopPropagation(); forceTerminalRefresh(entry.session.id); }}
+              onPointerDown={(event) => event.stopPropagation()}
+              title="Force redraw"
+              aria-label={`Refresh terminal ${entry.session.name}`}
+              data-pane-action="refresh"
+            >
+              <RotateCw size={11} />
+            </button>
+          </>
         )}
         {entry.kind === 'board' && entry.item.type === 'tunnels' && (
           <button
