@@ -18,12 +18,35 @@ interface FavouritesState {
 export interface FavouriteSession {
   agent: Agent;
   session: PtySession;
+  /** Every configured relay route that reaches this physical daemon/session. */
+  routes: Agent[];
 }
 
 export function collectFavouriteSessions(agents: Agent[], sessionsByAgent: SessionsByAgent): FavouriteSession[] {
-  return agents.flatMap((agent) => Object.values(sessionsByAgent[agent.id] || {})
-    .filter((session) => session.meta?.fav === true)
-    .map((session) => ({ agent, session })))
+  const grouped = new Map<string, FavouriteSession>();
+  for (const agent of agents) {
+    for (const session of Object.values(sessionsByAgent[agent.id] || {})) {
+      if (session.meta?.fav !== true) continue;
+      const key = `${agent.fingerprint}\0${session.id}`;
+      const current = grouped.get(key);
+      if (!current) {
+        grouped.set(key, { agent, session, routes: [agent] });
+        continue;
+      }
+      current.routes.push(agent);
+      const currentIsLive = current.session.processes !== undefined;
+      const candidateIsLive = session.processes !== undefined;
+      if ((!current.agent.online && agent.online) || (!currentIsLive && candidateIsLive)) {
+        current.agent = agent;
+        current.session = session;
+      }
+    }
+  }
+  return [...grouped.values()]
+    .map((item) => ({
+      ...item,
+      routes: item.routes.sort((a, b) => a.relay_name.localeCompare(b.relay_name)),
+    }))
     .sort((a, b) => (b.session.created_at || '').localeCompare(a.session.created_at || ''));
 }
 

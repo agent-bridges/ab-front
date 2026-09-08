@@ -191,12 +191,15 @@ export default function MobileWorkspace() {
   const tabs = openTabIds.flatMap((key) => { const entry = entryMap.get(key); return entry ? [entry] : []; });
   const activeEntry = activeKey ? entryMap.get(activeKey) : undefined;
   const favourites = useMemo(() => collectFavouriteSessions(agents, favouriteSessionsByAgent).map((item) => {
-    if (item.agent.id !== currentAgentId) return item;
+    const currentRoute = item.routes.find((route) => route.id === currentAgentId);
+    if (!currentRoute) return item;
     const live = sessionsById[item.session.id];
-    return live ? { ...item, session: { ...item.session, ...live, meta: item.session.meta } } : item;
+    return live ? { ...item, agent: currentRoute, session: { ...item.session, ...live, meta: item.session.meta } } : item;
   }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
   const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
-  const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
+  const favouriteFailedAgents = new Set(agents
+    .filter((agent) => agent.online && favouriteErrorsByAgent[agent.id])
+    .map((agent) => agent.fingerprint)).size;
   useFavouriteLiveStatus(agents, collection === 'fav', currentAgentId);
 
   useEffect(() => { setOrder((previous) => reconcileMobileOrder(previous, entries.map((entry) => entry.key))); }, [entries]);

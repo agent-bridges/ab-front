@@ -232,12 +232,15 @@ export default function Workspace() {
   const focusedEntry = focusedItemId ? entryMap.get(focusedItemId) : undefined;
   const focusedGroup = focusedItemId ? groupMap.get(focusedItemId) : undefined;
   const favourites = useMemo(() => collectFavouriteSessions(agents, favouriteSessionsByAgent).map((item) => {
-    if (item.agent.id !== currentAgentId) return item;
+    const currentRoute = item.routes.find((route) => route.id === currentAgentId);
+    if (!currentRoute) return item;
     const live = sessionsById[item.session.id];
-    return live ? { ...item, session: { ...item.session, ...live, meta: item.session.meta } } : item;
+    return live ? { ...item, agent: currentRoute, session: { ...item.session, ...live, meta: item.session.meta } } : item;
   }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
   const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
-  const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
+  const favouriteFailedAgents = new Set(agents
+    .filter((agent) => agent.online && favouriteErrorsByAgent[agent.id])
+    .map((agent) => agent.fingerprint)).size;
   useFavouriteLiveStatus(agents, sidebarSection === 'fav', currentAgentId);
 
   useEffect(() => {

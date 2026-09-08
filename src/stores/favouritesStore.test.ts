@@ -30,6 +30,22 @@ describe('collectFavouriteSessions', () => {
     expect(result.map((item) => `${item.agent.id}/${item.session.id}`)).toEqual(['second/newest', 'first/old']);
   });
 
+  it('deduplicates one physical terminal exposed through two relay routes', () => {
+    const remote = { ...agent('remote~same'), fingerprint: 'same', relay_name: 'Remote' };
+    const home = { ...agent('home~same'), fingerprint: 'same', relay_name: 'Home' };
+    const rest = session('pty-1', true, '2026-02-01T00:00:00Z');
+    const live = { ...rest, processes: [{ pid: 42, cmd: 'codex', args: '' }], ai_status: 'working' };
+    const result = collectFavouriteSessions([remote, home], {
+      [remote.id]: { [rest.id]: rest },
+      [home.id]: { [rest.id]: live },
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].routes.map((route) => route.id)).toEqual([home.id, remote.id]);
+    expect(result[0].agent.id).toBe(home.id);
+    expect(result[0].session.ai_status).toBe('working');
+  });
+
   it('keeps live activity while refreshing daemon-owned favourite metadata', () => {
     const rest = session('one', true, '2026-01-01T00:00:00Z');
     const merged = mergeFavouriteMetadata([rest], {
