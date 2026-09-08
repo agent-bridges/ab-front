@@ -23,17 +23,19 @@ describe('forceRefresh', () => {
       connection: { sendResize },
       stickyToBottom: false,
       forceBottomAfterReplay: false,
+      forceBottomUntil: 0,
       restoreDistanceFromBottom: 300,
     } as unknown as CachedTerminal;
     getCache().set('pty-1', cached);
 
     forceRefresh('pty-1');
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(1_800);
 
     expect(cached.stickyToBottom).toBe(true);
     expect(cached.forceBottomAfterReplay).toBe(true);
+    expect(cached.forceBottomUntil).toBeGreaterThan(Date.now());
     expect(cached.restoreDistanceFromBottom).toBeNull();
-    expect(scrollToBottom).toHaveBeenCalledTimes(2);
+    expect(scrollToBottom).toHaveBeenCalledTimes(5);
     expect(fit).toHaveBeenCalledOnce();
     expect(sendResize).toHaveBeenNthCalledWith(1, 40, 99);
     expect(sendResize).toHaveBeenNthCalledWith(2, 40, 100);

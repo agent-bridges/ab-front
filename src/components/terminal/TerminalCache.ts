@@ -17,6 +17,8 @@ export interface CachedTerminal {
   scrollbackInfoReceived: boolean;
   restoreDistanceFromBottom: number | null;
   forceBottomAfterReplay: boolean;
+  /** Explicit refresh follows every delayed Codex redraw chunk for this window. */
+  forceBottomUntil: number;
   onFilePath?: (path: string) => void;
 }
 
@@ -61,6 +63,7 @@ export function forceRefresh(ptyId: string) {
   // and the upcoming clear/replay to the tail.
   cached.stickyToBottom = true;
   cached.forceBottomAfterReplay = true;
+  cached.forceBottomUntil = Date.now() + 5_000;
   cached.restoreDistanceFromBottom = null;
   cached.term.scrollToBottom();
   cached.fitAddon.fit();
@@ -71,6 +74,17 @@ export function forceRefresh(ptyId: string) {
     cached.connection.sendResize(rows, cols);
     requestAnimationFrame(() => cached.term.scrollToBottom());
   }, 100);
+  // A fullscreen TUI redraw can be delayed well beyond the resize frame,
+  // especially over a relay. Re-pin after the common redraw/replay phases.
+  for (const delay of [350, 900, 1_800]) {
+    setTimeout(() => {
+      if (getCache().get(ptyId) !== cached) return;
+      requestAnimationFrame(() => {
+        cached.term.scrollToBottom();
+        cached.stickyToBottom = true;
+      });
+    }, delay);
+  }
 }
 
 export function destroyAll() {

@@ -167,7 +167,9 @@ export function useTerminal(
       const filtered = stripTerminalRecoveryNoise(data).replace(/\x7f/g, '');
       if (!filtered) return;
 
-      const forceBottom = cached.forceBottomAfterReplay;
+      // An explicit refresh must follow the complete multi-chunk replay and
+      // delayed Codex redraw, not only the first websocket data frame.
+      const forceBottom = cached.forceBottomAfterReplay || Date.now() < (cached.forceBottomUntil || 0);
       const restoreDistance = cached.restoreDistanceFromBottom;
       const replayWrite = cached.scrollbackLoading && (forceBottom || restoreDistance !== null);
       if (replayWrite) cached.scrollbackWritePending = true;
@@ -272,6 +274,7 @@ export function useTerminal(
       scrollbackInfoReceived: false,
       restoreDistanceFromBottom: null,
       forceBottomAfterReplay: true,
+      forceBottomUntil: 0,
     };
 
     cache.set(ptyId, cached);
