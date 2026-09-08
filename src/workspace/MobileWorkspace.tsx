@@ -191,15 +191,12 @@ export default function MobileWorkspace() {
   const tabs = openTabIds.flatMap((key) => { const entry = entryMap.get(key); return entry ? [entry] : []; });
   const activeEntry = activeKey ? entryMap.get(activeKey) : undefined;
   const favourites = useMemo(() => collectFavouriteSessions(agents, favouriteSessionsByAgent).map((item) => {
-    const currentRoute = item.routes.find((route) => route.id === currentAgentId);
-    if (!currentRoute) return item;
+    if (item.agent.id !== currentAgentId) return item;
     const live = sessionsById[item.session.id];
-    return live ? { ...item, agent: currentRoute, session: { ...item.session, ...live, meta: item.session.meta } } : item;
+    return live ? { ...item, session: { ...item.session, ...live, meta: item.session.meta } } : item;
   }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
   const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
-  const favouriteFailedAgents = new Set(agents
-    .filter((agent) => agent.online && favouriteErrorsByAgent[agent.id])
-    .map((agent) => agent.fingerprint)).size;
+  const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
   useFavouriteLiveStatus(agents, collection === 'fav', currentAgentId);
 
   useEffect(() => { setOrder((previous) => reconcileMobileOrder(previous, entries.map((entry) => entry.key))); }, [entries]);
@@ -390,7 +387,7 @@ export default function MobileWorkspace() {
 
         <nav className="absolute bottom-0 left-0 right-0 z-50 flex overflow-x-auto border-t border-canvas-border bg-canvas-surface" style={{ height: TAB_HEIGHT }} aria-label="Open workspace tabs">
           <button onClick={() => { setActiveKey(null); setCollection(null); }} className={`flex h-full items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${!activeKey && !collection ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><LayoutGrid size={12} />Canvas</button>
-          {tabs.map((entry) => <button key={entry.key} onClick={() => { setCollection(null); setActiveKey(entry.key); }} className={`flex h-full min-w-0 items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${activeKey === entry.key && !collection ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><span className="truncate">{entry.kind === 'session' ? <TerminalIcon size={12} className="inline" /> : entry.item.type === 'notes' ? <StickyNote size={12} className="inline" /> : entry.item.type === 'filebrowser' ? <FolderOpen size={12} className="inline" /> : <Cable size={12} className="inline" />} {mobileEntryDisplayTitle(entry)}</span><span onClick={(event) => { event.stopPropagation(); closeTab(entry.key); if (activeKey === entry.key) setActiveKey(null); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={10} /></span></button>)}
+          {tabs.map((entry) => <button key={entry.key} onClick={() => { setCollection(null); setActiveKey(entry.key); }} className={`flex h-full min-w-0 items-center gap-1.5 whitespace-nowrap border-r border-canvas-border px-3 text-xs ${activeKey === entry.key && !collection ? 'border-t-2 border-t-canvas-accent bg-canvas-bg text-canvas-accent' : 'text-canvas-muted'}`}><span className="min-w-0"><span className="block truncate">{entry.kind === 'session' ? <TerminalIcon size={12} className="inline" /> : entry.item.type === 'notes' ? <StickyNote size={12} className="inline" /> : entry.item.type === 'filebrowser' ? <FolderOpen size={12} className="inline" /> : <Cable size={12} className="inline" />} {mobileEntryDisplayTitle(entry)}</span>{entry.kind === 'session' && currentAgent && <span className="block truncate text-[9px] leading-3 text-canvas-muted">{currentAgent.relay_name}</span>}</span><span onClick={(event) => { event.stopPropagation(); closeTab(entry.key); if (activeKey === entry.key) setActiveKey(null); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={10} /></span></button>)}
         </nav>
       </main>
 

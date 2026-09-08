@@ -17,16 +17,12 @@ export function useFavouriteLiveStatus(
   const mergeLiveAgent = useFavouritesStore((state) => state.mergeLiveAgent);
   const clearLiveAgent = useFavouritesStore((state) => state.clearLiveAgent);
 
-  const routeIds = useMemo(() => {
-    const currentFingerprint = agents.find((agent) => agent.id === currentAgentId)?.fingerprint;
-    const selected = new Map<string, string>();
-    for (const agent of agents) {
-      if (!agent.online || agent.fingerprint === currentFingerprint) continue;
-      if (!Object.values(sessionsByAgent[agent.id] || {}).some((session) => session.meta?.fav === true)) continue;
-      if (!selected.has(agent.fingerprint)) selected.set(agent.fingerprint, agent.id);
-    }
-    return [...selected.values()].sort().join('\n');
-  }, [agents, currentAgentId, sessionsByAgent]);
+  const routeIds = useMemo(() => agents
+    .filter((agent) => agent.online && agent.id !== currentAgentId)
+    .filter((agent) => Object.values(sessionsByAgent[agent.id] || {}).some((session) => session.meta?.fav === true))
+    .map((agent) => agent.id)
+    .sort()
+    .join('\n'), [agents, currentAgentId, sessionsByAgent]);
 
   useEffect(() => {
     if (!enabled || !routeIds) return;

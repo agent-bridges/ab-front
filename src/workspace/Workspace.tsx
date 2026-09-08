@@ -224,6 +224,7 @@ export default function Workspace() {
   }, [boardItems, currentAgentId, ptyAgentId, sessionsById, sort, workspaceAgentId]);
   const entryMap = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries]);
   const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
+  const currentAgent = currentAgentId ? agentById.get(currentAgentId) : undefined;
   const visibleEntries = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return normalized ? entries.filter((entry) => workspaceEntryDisplayTitle(entry).toLowerCase().includes(normalized) || workspaceEntryTitle(entry).toLowerCase().includes(normalized)) : entries;
@@ -232,15 +233,12 @@ export default function Workspace() {
   const focusedEntry = focusedItemId ? entryMap.get(focusedItemId) : undefined;
   const focusedGroup = focusedItemId ? groupMap.get(focusedItemId) : undefined;
   const favourites = useMemo(() => collectFavouriteSessions(agents, favouriteSessionsByAgent).map((item) => {
-    const currentRoute = item.routes.find((route) => route.id === currentAgentId);
-    if (!currentRoute) return item;
+    if (item.agent.id !== currentAgentId) return item;
     const live = sessionsById[item.session.id];
-    return live ? { ...item, agent: currentRoute, session: { ...item.session, ...live, meta: item.session.meta } } : item;
+    return live ? { ...item, session: { ...item.session, ...live, meta: item.session.meta } } : item;
   }), [agents, currentAgentId, favouriteSessionsByAgent, sessionsById]);
   const favouritesLoading = agents.some((agent) => agent.online && favouriteLoadingAgents[agent.id]);
-  const favouriteFailedAgents = new Set(agents
-    .filter((agent) => agent.online && favouriteErrorsByAgent[agent.id])
-    .map((agent) => agent.fingerprint)).size;
+  const favouriteFailedAgents = agents.filter((agent) => agent.online && favouriteErrorsByAgent[agent.id]).length;
   useFavouriteLiveStatus(agents, sidebarSection === 'fav', currentAgentId);
 
   useEffect(() => {
@@ -394,7 +392,7 @@ export default function Workspace() {
           {tabs.map((id) => {
             const entry = entryMap.get(id); const group = groupMap.get(id); const title = entry ? workspaceEntryDisplayTitle(entry) : group?.name || id;
             return <button key={id} onClick={() => openTab(id)} className={`group flex min-w-28 max-w-52 items-center gap-2 border-r border-canvas-border px-2 text-xs ${focusedItemId === id ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}>
-              {entry ? <EntryIcon entry={entry} /> : <LayoutGrid size={13} />}<span className="flex-1 truncate text-left">{title}</span><span onClick={(event) => { event.stopPropagation(); closeTab(id); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={11} /></span>
+              {entry ? <EntryIcon entry={entry} /> : <LayoutGrid size={13} />}<span className="min-w-0 flex-1 text-left"><span className="block truncate">{title}</span>{entry?.kind === 'session' && currentAgent && <span className="block truncate text-[9px] leading-3 text-canvas-muted">{currentAgent.relay_name}</span>}</span><span onClick={(event) => { event.stopPropagation(); closeTab(id); }} className="rounded p-0.5 hover:bg-canvas-border"><X size={11} /></span>
             </button>;
           })}
         </div>
