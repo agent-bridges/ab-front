@@ -31,7 +31,7 @@ import { daemonDisplayName } from '../stores/clientAliasStore';
 import DaemonLinkDialog from '../components/DaemonLinkDialog';
 import { filterOfflineMachines, useShowOfflineMachines } from '../hooks/useShowOfflineMachines';
 import { collectFavouriteSessions, useFavouritesStore, type FavouriteSession } from '../stores/favouritesStore';
-import { FAV_PANE_ID, FavouritesPanel, LAYOUTS_PANE_ID, LayoutsPanel } from './WorkspaceCollections';
+import { FavouritesPanel, LayoutsPanel } from './WorkspaceCollections';
 
 const sessionKey = (id: string) => `session:${id}`;
 const boardKey = (id: string) => `board:${id}`;
@@ -170,7 +170,6 @@ export default function Workspace() {
   const setSidebarWidth = useWorkspaceStore((state) => state.setSidebarWidth);
   const openTab = useWorkspaceStore((state) => state.openTab);
   const closeTab = useWorkspaceStore((state) => state.closeTab);
-  const focusTab = useWorkspaceStore((state) => state.focusTab);
   const addBoardItem = useWorkspaceStore((state) => state.addBoardItem);
   const updateBoardItem = useWorkspaceStore((state) => state.updateBoardItem);
   const removeBoardItem = useWorkspaceStore((state) => state.removeBoardItem);
@@ -197,6 +196,7 @@ export default function Workspace() {
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [query, setQuery] = useState('');
   const [showOffline, setShowOffline] = useShowOfflineMachines();
+  const [sidebarSection, setSidebarSection] = useState<'sessions' | 'layouts' | 'fav'>('sessions');
   const [pendingFavourite, setPendingFavourite] = useState<{ agentId: string; sessionId: string } | null>(null);
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const autoOpenedAgentsRef = useRef<Set<string>>(new Set());
@@ -243,11 +243,11 @@ export default function Workspace() {
   }, [currentAgentId, refreshFavouriteAgent]);
 
   useEffect(() => {
-    if (focusedItemId !== FAV_PANE_ID) return;
+    if (sidebarSection !== 'fav') return;
     void refreshFavouriteAgents(agents);
     const timer = window.setInterval(() => void refreshFavouriteAgents(agents), 15_000);
     return () => window.clearInterval(timer);
-  }, [agents, focusedItemId, refreshFavouriteAgents]);
+  }, [agents, refreshFavouriteAgents, sidebarSection]);
 
   useEffect(() => {
     if (!pendingFavourite || currentAgentId !== pendingFavourite.agentId) return;
@@ -259,7 +259,7 @@ export default function Workspace() {
 
   useEffect(() => {
     if (!currentAgentId) return;
-    const focusedPaneIsValid = Boolean(focusedItemId && (entryMap.has(focusedItemId) || groupMap.has(focusedItemId) || focusedItemId === LAYOUTS_PANE_ID || focusedItemId === FAV_PANE_ID));
+    const focusedPaneIsValid = Boolean(focusedItemId && (entryMap.has(focusedItemId) || groupMap.has(focusedItemId)));
     // Pick a useful initial pane once per agent. After the user explicitly
     // hides the final tab, keep the workspace empty even after A -> B -> A.
     const first = entries[0];
@@ -293,7 +293,12 @@ export default function Workspace() {
 
   const sidebar = (
     <aside className={`${isMobile ? 'fixed inset-y-10 left-0 z-50 shadow-2xl' : 'relative'} flex min-h-0 flex-col border-r border-canvas-border bg-canvas-surface`} style={{ width: isMobile ? 'min(88vw, 340px)' : sidebarWidth }}>
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-canvas-border px-2">
+      <div className="flex h-9 shrink-0 border-b border-canvas-border" role="tablist" aria-label="Sidebar sections">
+        <button role="tab" aria-selected={sidebarSection === 'sessions'} onClick={() => setSidebarSection('sessions')} className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 text-[11px] ${sidebarSection === 'sessions' ? 'border-canvas-accent text-canvas-accent' : 'border-transparent text-canvas-muted hover:bg-canvas-border'}`}><TerminalIcon size={12} />Sessions</button>
+        <button role="tab" aria-selected={sidebarSection === 'layouts'} onClick={() => setSidebarSection('layouts')} className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 text-[11px] ${sidebarSection === 'layouts' ? 'border-canvas-accent text-canvas-accent' : 'border-transparent text-canvas-muted hover:bg-canvas-border'}`}><LayoutGrid size={12} />Layouts</button>
+        <button role="tab" aria-selected={sidebarSection === 'fav'} onClick={() => setSidebarSection('fav')} className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 border-b-2 px-2 text-[11px] ${sidebarSection === 'fav' ? 'border-canvas-accent text-canvas-accent' : 'border-transparent text-canvas-muted hover:bg-canvas-border'}`}><Star size={12} className={sidebarSection === 'fav' ? 'fill-current' : ''} />Fav{favourites.length > 0 && <span className="rounded bg-canvas-border px-1 text-[9px]">{favourites.length}</span>}</button>
+      </div>
+      {sidebarSection === 'sessions' && <div className="flex h-9 shrink-0 items-center gap-2 border-b border-canvas-border px-2">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter sessions and tools"
           className="min-w-0 flex-1 rounded border border-canvas-border bg-canvas-bg px-2 py-1 text-xs text-canvas-text outline-none focus:border-canvas-accent" />
         <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSort(sort === 'type' ? 'name' : sort === 'name' ? 'recent' : sort === 'recent' ? 'status' : 'type')} title={`Sort: ${sort}`}><ArrowDownUp size={13} /></button>
@@ -308,8 +313,9 @@ export default function Workspace() {
         </button>
         {canAdministerRelays && <button className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-semibold text-canvas-accent hover:bg-canvas-border" onClick={() => setRelayEditor({ relay: null, deleting: false })} title="Add relay"><Plus size={12} />Relay</button>}
         {isMobile && <button className="rounded p-1 hover:bg-canvas-border" onClick={() => setSidebarOpen(false)}><X size={14} /></button>}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+      </div>}
+      <div className="min-h-0 flex-1">
+        {sidebarSection === 'sessions' ? <div className="h-full overflow-y-auto py-1">
         {relays.map((relay) => <div key={relay.id} className={!relay.enabled ? 'opacity-60' : ''}>
           <div className={`flex min-h-7 items-center gap-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-canvas-muted ${DESKTOP_TREE_DEPTH_CLASSES.relayRow}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${relayCanConnect(relay) ? 'bg-green-400' : relay.enabled ? 'bg-amber-400' : 'bg-canvas-muted'}`} />
@@ -345,6 +351,9 @@ export default function Workspace() {
           })}
           {filterOfflineMachines(relay.machines, showOffline).length === 0 && <div className={`${DESKTOP_TREE_DEPTH_CLASSES.daemonBranch} ${DESKTOP_TREE_DEPTH_CLASSES.daemonRow} py-1.5 text-[10px] text-canvas-muted`}>{!relay.enabled ? 'Relay disabled' : relay.machines.length > 0 ? 'Offline machines hidden' : 'No machines'}</div>}
         </div>)}
+        </div> : sidebarSection === 'layouts'
+          ? <LayoutsPanel groups={groups} entryMap={entryMap} onOpen={(group) => openTab(group.id)} onDelete={(group) => deleteGroup(group.id)} />
+          : <FavouritesPanel favourites={favourites} loading={favouritesLoading} failedAgents={favouriteFailedAgents} onOpen={openFavourite} onRemove={(item) => void setFavourite(item.agent.id, item.session, false).catch(console.error)} />}
       </div>
       {!isMobile && <div className="absolute inset-y-0 -right-1 w-2 cursor-col-resize" onPointerDown={(event) => { resizeRef.current = { x: event.clientX, width: sidebarWidth }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (resizeRef.current) setSidebarWidth(resizeRef.current.width + event.clientX - resizeRef.current.x); }} onPointerUp={() => { resizeRef.current = null; }} />}
     </aside>
@@ -380,8 +389,6 @@ export default function Workspace() {
       {isMobile && sidebarOpen && <button className="fixed inset-0 top-10 z-40 bg-black/50" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar" />}
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-9 shrink-0 overflow-x-auto border-b border-canvas-border bg-canvas-surface">
-          <button onClick={() => focusTab(LAYOUTS_PANE_ID)} className={`flex min-w-24 items-center gap-2 border-r border-canvas-border px-3 text-xs ${focusedItemId === LAYOUTS_PANE_ID ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}><LayoutGrid size={13} /><span>Layouts</span></button>
-          <button onClick={() => focusTab(FAV_PANE_ID)} className={`flex min-w-20 items-center gap-2 border-r border-canvas-border px-3 text-xs ${focusedItemId === FAV_PANE_ID ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}><Star size={13} className={focusedItemId === FAV_PANE_ID ? 'fill-current' : ''} /><span>Fav</span>{favourites.length > 0 && <span className="rounded bg-canvas-border px-1 text-[9px]">{favourites.length}</span>}</button>
           {tabs.map((id) => {
             const entry = entryMap.get(id); const group = groupMap.get(id); const title = entry ? workspaceEntryDisplayTitle(entry) : group?.name || id;
             return <button key={id} onClick={() => openTab(id)} className={`group flex min-w-28 max-w-52 items-center gap-2 border-r border-canvas-border px-2 text-xs ${focusedItemId === id ? 'bg-canvas-bg text-canvas-accent' : 'text-canvas-muted hover:bg-canvas-border'}`}>
@@ -390,7 +397,7 @@ export default function Workspace() {
           })}
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
-          {focusedItemId === LAYOUTS_PANE_ID ? <LayoutsPanel groups={groups} entryMap={entryMap} onOpen={(group) => openTab(group.id)} onDelete={(group) => deleteGroup(group.id)} /> : focusedItemId === FAV_PANE_ID ? <FavouritesPanel favourites={favourites} loading={favouritesLoading} failedAgents={favouriteFailedAgents} onOpen={openFavourite} onRemove={(item) => void setFavourite(item.agent.id, item.session, false).catch(console.error)} /> : focusedEntry ? <DesktopEntryPane entry={focusedEntry} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
+          {focusedEntry ? <DesktopEntryPane entry={focusedEntry} active onHide={() => closeTab(focusedEntry.key)} onDelete={() => setDeleteEntry(focusedEntry)} /> : focusedGroup ? <>
             <div className="flex h-8 shrink-0 items-center gap-2 border-b border-canvas-border bg-canvas-surface px-2">
               <input value={focusedGroup.name} onChange={(event) => renameGroup(focusedGroup.id, event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs outline-none" />
               <select value={focusedGroup.layout} onChange={(event) => setGroupLayout(focusedGroup.id, event.target.value as IdeGroupLayout)} className="rounded border border-canvas-border bg-canvas-bg px-1 text-xs"><option value="v2">Columns</option><option value="h2">Rows</option><option value="grid">Grid</option></select>
