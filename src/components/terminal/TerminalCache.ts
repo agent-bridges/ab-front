@@ -56,12 +56,20 @@ export function forceRefresh(ptyId: string) {
   const cache = getCache();
   const cached = cache.get(ptyId);
   if (!cached) return;
+  // Refresh is an explicit request to return to live output, not a passive
+  // resize while the user is reading history. Pin both the current viewport
+  // and the upcoming clear/replay to the tail.
+  cached.stickyToBottom = true;
+  cached.forceBottomAfterReplay = true;
+  cached.restoreDistanceFromBottom = null;
+  cached.term.scrollToBottom();
   cached.fitAddon.fit();
   const { rows, cols } = cached.term;
   // Fake resize to trigger server scrollback re-send, then restore
   cached.connection.sendResize(rows, cols - 1);
   setTimeout(() => {
     cached.connection.sendResize(rows, cols);
+    requestAnimationFrame(() => cached.term.scrollToBottom());
   }, 100);
 }
 

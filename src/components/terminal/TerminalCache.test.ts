@@ -1,43 +1,41 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { forceRefresh, getCache } from './TerminalCache';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { forceRefresh, getCache, type CachedTerminal } from './TerminalCache';
 
 describe('forceRefresh', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    getCache().clear();
-  });
-
   afterEach(() => {
     getCache().clear();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
-  it('fits only the selected terminal and nudges its PTY width to force redraw', () => {
-    const fit = vi.fn();
+  it('pins the viewport and replay to the terminal tail', () => {
+    vi.useFakeTimers();
+    const scrollToBottom = vi.fn();
     const sendResize = vi.fn();
-    getCache().set('pty-1', {
-      ptyId: 'pty-1',
-      fitAddon: { fit } as never,
-      term: { rows: 40, cols: 120 } as never,
-      connection: { sendResize } as never,
-      container: {} as never,
-      lastUsed: 0,
-      stickyToBottom: true,
-      scrollbackTotalChunks: 0,
-      scrollbackReturnedChunks: 0,
-      scrollbackLoading: false,
-      scrollbackWritePending: false,
-      scrollbackInfoReceived: false,
-      restoreDistanceFromBottom: null,
-      forceBottomAfterReplay: false,
+    const fit = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
     });
+    const cached = {
+      term: { rows: 40, cols: 100, scrollToBottom },
+      fitAddon: { fit },
+      connection: { sendResize },
+      stickyToBottom: false,
+      forceBottomAfterReplay: false,
+      restoreDistanceFromBottom: 300,
+    } as unknown as CachedTerminal;
+    getCache().set('pty-1', cached);
 
     forceRefresh('pty-1');
-    expect(fit).toHaveBeenCalledOnce();
-    expect(sendResize).toHaveBeenCalledWith(40, 119);
-    expect(sendResize).not.toHaveBeenCalledWith(40, 120);
-
     vi.advanceTimersByTime(100);
-    expect(sendResize).toHaveBeenLastCalledWith(40, 120);
+
+    expect(cached.stickyToBottom).toBe(true);
+    expect(cached.forceBottomAfterReplay).toBe(true);
+    expect(cached.restoreDistanceFromBottom).toBeNull();
+    expect(scrollToBottom).toHaveBeenCalledTimes(2);
+    expect(fit).toHaveBeenCalledOnce();
+    expect(sendResize).toHaveBeenNthCalledWith(1, 40, 99);
+    expect(sendResize).toHaveBeenNthCalledWith(2, 40, 100);
   });
 });

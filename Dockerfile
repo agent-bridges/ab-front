@@ -5,8 +5,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-ARG BACKEND_URL
-RUN test -n "$BACKEND_URL" || (echo >&2 "BACKEND_URL build argument is required"; exit 1)
+ARG BACKEND_URL=http://127.0.0.1:8520
 RUN BACKEND_URL="$BACKEND_URL" npm run build
 
 FROM nginx:1.27-alpine
